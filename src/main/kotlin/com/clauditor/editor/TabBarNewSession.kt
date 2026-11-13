@@ -158,20 +158,24 @@ private const val RESTORE_PROP = "overclauditor.restoreMaximizeOnDoubleClick"
  * first and ignores consumed events, so both fired and every new session also toggled all
  * tool windows. Switch the platform's off, remembering the user's value for uninstall.
  */
-private fun claimDoubleClick() = try {
+private fun claimDoubleClick() {
+    try {
     val key = com.intellij.openapi.util.registry.Registry.get(MAXIMIZE_KEY)
     if (key.asBoolean()) {
         com.intellij.ide.util.PropertiesComponent.getInstance().setValue(RESTORE_PROP, true)
         key.setValue(false)
     }
-} catch (_: Throwable) {}
+    } catch (_: Throwable) {}
+}
 
 /** Uninstall: give the platform its double-click back if we took it. */
-fun releaseDoubleClick() = try {
+fun releaseDoubleClick() {
+    try {
     val props = com.intellij.ide.util.PropertiesComponent.getInstance()
     if (props.getBoolean(RESTORE_PROP)) {
         com.intellij.openapi.util.registry.Registry.get(MAXIMIZE_KEY).setValue(true)
         props.unsetValue(RESTORE_PROP)
     }
-} catch (_: Throwable) {}
+    } catch (_: Throwable) {}
+}
 
