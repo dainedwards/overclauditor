@@ -131,7 +131,7 @@ class ClaudeSessionsToolWindowFactory : ToolWindowFactory, DumbAware {
                 isWorktreeSession = true
             }
         }
-        com.clauditor.editor.openSessionTabAtEnd(project, file, true)
+        com.clauditor.editor.openForkNextToSource(project, file, session.sessionId)
     }
 
     override fun shouldBeAvailable(project: Project): Boolean = project.basePath != null

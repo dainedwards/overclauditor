@@ -36,6 +36,26 @@ fun openSessionTabAtEnd(project: Project, file: VirtualFile, focus: Boolean) {
     }
 }
 
+/**
+ * Open a fork right after the tab it was forked from: select that tab, then open with
+ * "Open new tabs at the end" off for this one call (the platform then inserts next to the
+ * selected tab). If the source isn't open in a tab, the fork goes at the end.
+ */
+fun openForkNextToSource(project: Project, fork: VirtualFile, sourceSessionId: String) {
+    val manager = FileEditorManager.getInstance(project)
+    val source = manager.openFiles.filterIsInstance<ClaudeSessionVirtualFile>().find { it.sessionId == sourceSessionId }
+    if (source == null) { openSessionTabAtEnd(project, fork, true); return }
+    manager.openFile(source, false)
+    val ui = com.intellij.ide.ui.UISettings.getInstance()
+    val was = ui.openTabsAtTheEnd
+    ui.openTabsAtTheEnd = false
+    try {
+        manager.openFile(fork, true)
+    } finally {
+        ui.openTabsAtTheEnd = was
+    }
+}
+
 /** Open (or focus) a tab for an existing session. */
 fun openClaudeSession(project: Project, session: com.clauditor.model.SessionDisplay, focus: Boolean) {
     val manager = FileEditorManager.getInstance(project)
