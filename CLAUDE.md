@@ -6,6 +6,9 @@ Fork of Clauditor (bdkent/clauditor, remote `upstream`) with the owner's changes
 - **First thing in a session: run `tools/upstream-check.sh`.** It checks once a day and is
   silent otherwise. If it lists commits, follow `docs/upstream-updates.md` before other work.
 
+- **Nothing user-specific in code.** Per-machine choices (buttons, summary source, status-line
+  hiding) go in `~/.overclauditor/config.json` (`OverclauditorConfig`), documented in
+  `docs/SETUP.md`; a new option goes in both. The owner's own config is that file on their machine.
 - **Ship every change with `tools/publish-local.sh`**: bumps `-oc.N`, builds, writes
   `~/.overclauditor/repo/updatePlugins.xml`, commits the bump. Rider polls that file (custom
   plugin repository) and auto-updates; then `git push`.

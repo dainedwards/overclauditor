@@ -1,3 +1,13 @@
+# Overclauditor
+
+A fork of [Clauditor](https://github.com/bdkent/clauditor) with a reworked session toolbar
+(model/effort dropdowns, session summary, configurable command buttons), usage and cache bars,
+pinned tab titles, and a faster session list. **Setup: [docs/SETUP.md](docs/SETUP.md).**
+
+The original Clauditor README follows.
+
+---
+
 # Clauditor
 
 [![Install from JetBrains Marketplace](https://img.shields.io/badge/JetBrains_Marketplace-Clauditor-blue?logo=jetbrains)](https://plugins.jetbrains.com/plugin/30981-clauditor)

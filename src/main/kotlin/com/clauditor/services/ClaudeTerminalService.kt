@@ -122,6 +122,7 @@ class ClaudeTerminalService(private val project: Project) {
             env["CLAUDITOR_STATUS_FILE"] = statusFile.toAbsolutePath().toString()
             env["CLAUDITOR_NOTIFY_FILE"] = notifyFile?.toAbsolutePath()?.toString() ?: ""
             env["CLAUDITOR_ORIGINAL_STATUSLINE"] = statusService.discoverOriginalStatusLineCommand() ?: ""
+            env["CLAUDITOR_HIDE_STATUSLINE"] = if (OverclauditorConfig.get().hideTerminalStatusLine) "1" else "0"
 
             Disposer.register(parent, Disposable {
                 try { Files.deleteIfExists(overridePath) } catch (_: Exception) {}

@@ -516,15 +516,17 @@ class ClaudeSessionEditor(
         }
 
         val rightPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 4, 2))
-        val slashButtons = SLASH_BUTTONS.map { cmd ->
-            javax.swing.JButton(cmd).apply {
+        // Buttons from ~/.overclauditor/config.json: text ones here, icon ones after Messages.
+        val configButtons = com.clauditor.services.OverclauditorConfig.get().buttons
+        val slashButtons = configButtons.filter { it.icon == null }.map { b ->
+            javax.swing.JButton(b.label).apply {
                 isFocusable = false
-                toolTipText = "Send /$cmd"
-                addActionListener { sendToTerminal("/$cmd\r") }
+                toolTipText = b.tooltip
+                addActionListener { sendToTerminal(b.send) }
             }
         }
         // All the same width, sized to the longest label rather than the theme's 72px minimum.
-        val slashWidth = slashButtons.maxOf { it.getFontMetrics(it.font).stringWidth(it.text) } + JBUI.scale(20)
+        val slashWidth = (slashButtons.maxOfOrNull { it.getFontMetrics(it.font).stringWidth(it.text) } ?: 0) + JBUI.scale(20)
         slashButtons.forEach {
             it.margin = JBUI.insets(0, 4)
             val size = java.awt.Dimension(slashWidth, it.preferredSize.height)
@@ -547,18 +549,13 @@ class ClaudeSessionEditor(
             }
         }
         rightPanel.add(historyToggle)
-        // The same chords as the user's hotkeys (~/.claude/keybindings.json), so the buttons run
-        // the existing playtest and copy-prompt mods instead of a second implementation.
-        rightPanel.add(javax.swing.JButton(AllIcons.Actions.Copy).apply {
-            isFocusable = false
-            toolTipText = "Copy prompt"
-            addActionListener { sendToTerminal(CHORD_COPY_PROMPT) }
-        })
-        rightPanel.add(javax.swing.JButton(AllIcons.Actions.Execute).apply {
-            isFocusable = false
-            toolTipText = "Playtest"
-            addActionListener { sendToTerminal(CHORD_PLAYTEST) }
-        })
+        for (b in configButtons.filter { it.icon != null }) {
+            rightPanel.add(javax.swing.JButton(b.icon).apply {
+                isFocusable = false
+                toolTipText = b.tooltip
+                addActionListener { sendToTerminal(b.send) }
+            })
+        }
 
         val toolbar = JPanel(BorderLayout())
         toolbar.add(leftPanel, BorderLayout.WEST)
@@ -1606,7 +1603,16 @@ class ClaudeSessionEditor(
     /** ~/.claude/statusline-cache/<session>.summary: line 1 the gist, line 2 what to test. Re-read on mtime change. */
     private fun refreshSummary() {
         val sid = file.sessionId ?: return
-        val f = java.io.File(System.getProperty("user.home"), ".claude/statusline-cache/$sid.summary")
+        val cfg = com.clauditor.services.OverclauditorConfig.get()
+        val f = when (cfg.summarySource) {
+            com.clauditor.services.OverclauditorConfig.SummarySource.OFF -> { summaryLabel.text = ""; return }
+            com.clauditor.services.OverclauditorConfig.SummarySource.FILE ->
+                java.io.File(cfg.summaryFile?.replace("{sessionId}", sid) ?: return)
+            com.clauditor.services.OverclauditorConfig.SummarySource.BUILTIN -> {
+                transcriptPath()?.let { com.clauditor.services.SummaryService.ensure(sid, it) }
+                com.clauditor.services.SummaryService.summaryFile(sid).toFile()
+            }
+        }
         val mtime = f.lastModified()
         if (mtime == 0L || mtime == summaryMtime) return
         summaryMtime = mtime
@@ -1869,11 +1875,6 @@ class ClaudeSessionEditor(
         )
 
         /** Project skills sent as slash commands from the git row, in display order. */
-        private val SLASH_BUTTONS = listOf("plan", "merge", "push", "pull")
-
-        /** ctrl+X ctrl+R → command:playtest, ctrl+X ctrl+Y → command:copyprompt. */
-        private const val CHORD_PLAYTEST = "\u0018\u0012"
-        private const val CHORD_COPY_PROMPT = "\u0018\u0019"
 
         /** Version shown beside each model; seeded with current releases, updated from the status line. */
         private val MODEL_VERSIONS = java.util.concurrent.ConcurrentHashMap(

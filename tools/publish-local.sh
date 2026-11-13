@@ -5,14 +5,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-export JAVA_HOME="${JAVA_HOME:-$HOME/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home}"
+# JDK 21: $JAVA_HOME if set, else the one macOS knows about.
+if [ -z "${JAVA_HOME:-}" ] && [ -x /usr/libexec/java_home ]; then
+  JAVA_HOME=$(/usr/libexec/java_home -v 21 2>/dev/null || true)
+fi
+[ -n "${JAVA_HOME:-}" ] || { echo "Set JAVA_HOME to a JDK 21 (see docs/SETUP.md)" >&2; exit 1; }
+export JAVA_HOME
 REPO="$HOME/.overclauditor/repo"
 
 cur=$(sed -n 's/^pluginVersion = //p' gradle.properties)
 base=${cur%-oc.*}
 n=${cur##*-oc.}
 ver="$base-oc.$((n + 1))"
-sed -i '' "s/^pluginVersion = .*/pluginVersion = $ver/" gradle.properties
+sed -i.bak "s/^pluginVersion = .*/pluginVersion = $ver/" gradle.properties && rm -f gradle.properties.bak
 
 rm -rf build/distributions
 ./gradlew buildPlugin -q
