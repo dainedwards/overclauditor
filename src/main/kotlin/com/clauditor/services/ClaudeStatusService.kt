@@ -81,6 +81,9 @@ class ClaudeStatusService(private val project: Project) : Disposable {
             // print nothing: the editor's toolbar replaces the terminal's status line.
             appendLine("  echo \"\$input\" | eval \"\$CLAUDITOR_ORIGINAL_STATUSLINE\" >/dev/null 2>&1")
             appendLine("fi")
+            // Print only an SGR reset: no output at all leaves Claude Code holding a blank
+            // status row under the prompt, while a zero-width escape collapses it.
+            appendLine("printf '\\033[0m'")
         })
         script.toFile().setExecutable(true)
         wrapperScript = script

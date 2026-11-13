@@ -157,11 +157,11 @@ class ClaudeSessionEditor(
         val cachePanel = JPanel().apply {
             layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.X_AXIS)
             isOpaque = false
-            add(JBLabel(AllIcons.Vcs.History).apply { border = JBUI.Borders.empty(0, 2, 0, 2); alignmentY = 0.5f })
-            cacheProgress.alignmentY = 0.5f
-            add(cacheProgress)
             usagePanel.alignmentY = 0.5f
             add(usagePanel)
+            add(JBLabel(AllIcons.Vcs.History).apply { border = JBUI.Borders.empty(0, 4, 0, 2); alignmentY = 0.5f })
+            cacheProgress.alignmentY = 0.5f
+            add(cacheProgress)
         }
         add(cachePanel, BorderLayout.WEST)
         add(contextProgress, BorderLayout.CENTER)
@@ -1280,6 +1280,13 @@ class ClaudeSessionEditor(
             label.foreground = value?.let(colorOf) ?: UIManager.getColor("Label.foreground")
             label.font = label.font.deriveFont(java.awt.Font.BOLD)
         }
+        // The closed combo paints its value in the combo's own foreground, not the renderer's.
+        fun sync() {
+            combo.foreground = (combo.selectedItem as? String)?.let(colorOf) ?: UIManager.getColor("ComboBox.foreground")
+            combo.font = combo.font.deriveFont(java.awt.Font.BOLD)
+        }
+        combo.addItemListener { sync() }
+        sync()
     }
 
     /** Last-wins read of a top-level key from user, project and project-local Claude settings. */
@@ -1529,11 +1536,7 @@ class ClaudeSessionEditor(
                 border = JBUI.Borders.empty(5, 3)
                 value = pct?.toInt()?.coerceIn(0, 100) ?: 0
                 string = if (pct == null) "${l.label} —" else "${l.label} ${pct.toInt()}%"
-                foreground = when {
-                    pct == null || pct < 50 -> COLOR_GREEN
-                    pct < 80 -> COLOR_YELLOW
-                    else -> COLOR_RED
-                }
+                foreground = rampColor((pct ?: 0.0) / 100)
                 preferredSize = java.awt.Dimension(JBUI.scale(95), preferredSize.height)
                 maximumSize = preferredSize
                 alignmentY = 0.5f
@@ -1601,11 +1604,7 @@ class ClaudeSessionEditor(
         cacheProgress.value = (frac * 1000).toInt()
         val secs = left / 1000
         cacheProgress.string = if (left == 0L) "Cache expired" else "Cache %d:%02d".format(secs / 60, secs % 60)
-        cacheProgress.foreground = when {
-            frac > 0.5 -> COLOR_GREEN
-            frac > 0.2 -> COLOR_YELLOW
-            else -> COLOR_RED
-        }
+        cacheProgress.foreground = rampColor(1 - frac)
     }
 
     private fun updateContextBar(status: ClaudeStatus?) {
@@ -1618,11 +1617,7 @@ class ClaudeSessionEditor(
             val pct = usedPercent.toInt().coerceIn(0, 100)
             contextProgress.value = pct
             contextProgress.string = "Context: $pct%"
-            contextProgress.foreground = when {
-                usedPercent < 50 -> COLOR_GREEN
-                usedPercent < 80 -> COLOR_YELLOW
-                else -> COLOR_RED
-            }
+            contextProgress.foreground = rampColor(usedPercent / 100)
             thinkingLabel.text = if (status.thinkingEnabled == true) "thinking" else ""
             remainingLabel.text = when {
                 status.contextRemainingTokens != null && status.contextWindowSize != null ->
@@ -1757,6 +1752,12 @@ class ClaudeSessionEditor(
     override fun dispose() { Disposer.dispose(rootDisposable) }
 
     companion object {
+        /** Green at 0 through yellow and orange to red at 1, so every step of usage shows. */
+        private fun rampColor(frac: Double): Color {
+            val f = frac.coerceIn(0.0, 1.0).toFloat()
+            return Color.getHSBColor((1f - f) * 120f / 360f, 0.70f, 0.85f)
+        }
+
         private val COLOR_GREEN = Color(0x5B, 0xA8, 0x5B)
         private val COLOR_YELLOW = Color(0xD4, 0xA0, 0x1E)
         private val COLOR_RED = Color(0xD4, 0x4B, 0x4B)
