@@ -1,0 +1,9 @@
+{
+  "name": "overclauditor",
+  "version": "1.0.0",
+  "description": "Worktree workflow commands bundled with the Overclauditor IDE plugin: /overclauditor:merge, :push, :pull. Loaded per session with --plugin-dir; nothing is installed.",
+  "author": {
+    "name": "dainedwards",
+    "url": "https://github.com/dainedwards/overclauditor"
+  }
+}

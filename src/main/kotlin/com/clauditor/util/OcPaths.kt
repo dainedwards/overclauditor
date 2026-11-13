@@ -36,6 +36,30 @@ object OcPaths {
         }
     }
 
+    private val BUNDLED = listOf(
+        ".claude-plugin/plugin.json", "commands/merge.md", "commands/push.md", "commands/pull.md",
+        "scripts/git-merge-lock.sh"
+    )
+
+    /**
+     * The Claude Code plugin bundled in this jar (commands /overclauditor:merge, :push, :pull),
+     * unpacked into [dataDir] and passed to each session with --plugin-dir. Nothing goes into
+     * ~/.claude; it is rewritten only when the bundled copy changes. Null if unpacking failed.
+     */
+    fun bundledClaudePlugin(): Path? = try {
+        val root = dataDir.resolve("claude-plugin")
+        for (rel in BUNDLED) {
+            val bytes = OcPaths::class.java.getResourceAsStream("/claude-plugin/$rel")?.use { it.readBytes() } ?: return null
+            val target = root.resolve(rel)
+            if (!Files.exists(target) || !Files.readAllBytes(target).contentEquals(bytes)) {
+                Files.createDirectories(target.parent)
+                Files.write(target, bytes)
+                if (rel.endsWith(".sh")) target.toFile().setExecutable(true)
+            }
+        }
+        root
+    } catch (_: Exception) { null }
+
     /** Temp files the status line, notify hooks and launch settings leave if the IDE dies mid-session. */
     fun sweepStaleTempFiles(maxAgeMs: Long = 24L * 3600 * 1000) {
         val now = System.currentTimeMillis()

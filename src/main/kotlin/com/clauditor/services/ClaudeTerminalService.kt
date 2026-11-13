@@ -128,8 +128,10 @@ class ClaudeTerminalService(private val project: Project) {
                 try { Files.deleteIfExists(overridePath) } catch (_: Exception) {}
             })
 
-            // Insert --settings right after the binary
+            // Insert --settings (and the bundled commands' --plugin-dir) right after the binary
+            val pluginDir = if (OverclauditorConfig.get().bundledCommands) com.clauditor.util.OcPaths.bundledClaudePlugin() else null
             arrayOf(resolvedCommand[0], "--settings", overridePath.toAbsolutePath().toString()) +
+                (pluginDir?.let { arrayOf("--plugin-dir", it.toString()) } ?: emptyArray()) +
                 resolvedCommand.drop(1).toTypedArray()
         } else {
             resolvedCommand

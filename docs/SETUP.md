@@ -26,8 +26,8 @@ An agent can do every step except the IDE clicks; ask the user for those.
 
 ## 3. Configure: `~/.overclauditor/config.json`
 
-Optional. Without it you get: a `plan` button, the built-in summary, and the user's status line
-shown as usual. Read live; edits apply to tabs opened afterwards (buttons, status line) or
+Optional. Without it you get: `plan` `merge` `push` `pull` buttons (the last three are the bundled
+`/overclauditor:*` commands), the built-in summary, and the user's status line shown as usual. Read live; edits apply to tabs opened afterwards (buttons, status line) or
 within seconds (summary).
 
 ```json
@@ -38,7 +38,8 @@ within seconds (summary).
     { "icon": "Actions.Execute", "tooltip": "Run my thing", "keys": "ctrl+x ctrl+r" }
   ],
   "summary": { "source": "builtin" },
-  "hideTerminalStatusLine": false
+  "hideTerminalStatusLine": false,
+  "bundledCommands": true
 }
 ```
 
@@ -52,7 +53,14 @@ within seconds (summary).
     `~/.claude/keybindings.json` (`"ctrl+x ctrl+r": "command:<name>"`) to give a button a
     plugin command without typing.
   - Custom slash commands must exist for the user (`~/.claude/commands/*.md` or a plugin).
-    Ask the user which of theirs they want as buttons; don't invent any.
+    Ask the user which of theirs they want as buttons; don't invent any. A `buttons` list
+    replaces the defaults, so include `/overclauditor:merge` etc. if they still want those.
+  - **Agent: if the user already has their own `/merge`, `/push` or `/pull`**
+    (`~/.claude/commands/`), ask whether the buttons should send theirs or the bundled
+    `/overclauditor:*` ones.
+- **`bundledCommands`** (default `true`) — load the bundled `/overclauditor:merge`, `:push`,
+  `:pull` into plugin sessions (`claude --plugin-dir <IDE system folder>/overclauditor/claude-plugin`).
+  Nothing is installed into `~/.claude`. `false` leaves them out.
 - **`summary`** — the two-line "what this session is about – what to test" text in the
   toolbar, also used to retitle tabs when work starts or the session changes worktree.
   - `"builtin"` (default): the plugin runs `claude -p --model haiku` in the background when
@@ -89,7 +97,7 @@ passes its status-line capture and hooks to the sessions it starts with `claude 
 | Path | What | On uninstall |
 |---|---|---|
 | `~/.overclauditor/config.json` | this config, written by the user | kept (theirs to delete) |
-| IDE system folder `/overclauditor/` | session-list index, pinned titles, built-in summaries | deleted |
+| IDE system folder `/overclauditor/` | session-list index, pinned titles, built-in summaries, the bundled commands | deleted |
 | temp folder `clauditor-*` | per-session status capture | deleted when sessions close; leftovers swept at startup and on uninstall |
 
 Built-in summaries run `claude -p --no-session-persistence` with auto-memory off, so they add

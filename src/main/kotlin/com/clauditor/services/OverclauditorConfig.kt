@@ -23,16 +23,24 @@ object OverclauditorConfig {
         /** For FILE: path with {sessionId}, line 1 the gist, line 2 what to test. */
         val summaryFile: String?,
         /** Blank the user's own status line in plugin sessions (the toolbar shows the same information). */
-        val hideTerminalStatusLine: Boolean
+        val hideTerminalStatusLine: Boolean,
+        /** Load the bundled /overclauditor:merge, :push, :pull into plugin sessions (--plugin-dir). */
+        val bundledCommands: Boolean
     )
 
     val file: Path = Path.of(System.getProperty("user.home"), ".overclauditor", "config.json")
 
     private val DEFAULT = Config(
-        buttons = listOf(Button("plan", null, "Send /plan", "/plan\r")),
+        buttons = listOf(
+            Button("plan", null, "Plan mode (/plan)", "/plan\r"),
+            Button("merge", null, "Merge this worktree into main (/overclauditor:merge)", "/overclauditor:merge\r"),
+            Button("push", null, "Merge into main, stay in the worktree (/overclauditor:push)", "/overclauditor:push\r"),
+            Button("pull", null, "Bring main into this worktree (/overclauditor:pull)", "/overclauditor:pull\r")
+        ),
         summarySource = SummarySource.BUILTIN,
         summaryFile = null,
-        hideTerminalStatusLine = false
+        hideTerminalStatusLine = false,
+        bundledCommands = true
     )
 
     @Volatile private var cached: Config = DEFAULT
@@ -68,7 +76,8 @@ object OverclauditorConfig {
             buttons = buttons,
             summarySource = source,
             summaryFile = summary?.get("file")?.asString?.replaceFirst("~", System.getProperty("user.home")),
-            hideTerminalStatusLine = o.get("hideTerminalStatusLine")?.asBoolean ?: DEFAULT.hideTerminalStatusLine
+            hideTerminalStatusLine = o.get("hideTerminalStatusLine")?.asBoolean ?: DEFAULT.hideTerminalStatusLine,
+            bundledCommands = o.get("bundledCommands")?.asBoolean ?: DEFAULT.bundledCommands
         )
     }
 

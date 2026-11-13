@@ -12,7 +12,7 @@ Clauditor 0.7.30 (https://github.com/bdkent/clauditor).
   summary ("what it's about - what to test") on the same row; the summary wraps smaller
   instead of growing the bar.
 - Configurable command buttons (`~/.overclauditor/config.json`): slash commands or key chords,
-  text or icon. Default: `/plan`. Example `/merge`, `/push`, `/pull` commands in `examples/`.
+  text or icon. Defaults: plan, merge, push, pull. Bundled `/overclauditor:merge`, `:push`, `:pull` commands, loaded per session with `--plugin-dir` (nothing installed).
 - Bottom bar: 5-hour, weekly and per-model weekly usage, prompt-cache countdown, context; all
   bars ramp green to red.
 - Built-in session summary via a background Haiku call, or read from your own file.

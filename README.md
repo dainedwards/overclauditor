@@ -37,22 +37,26 @@ that show everything about a session at a glance. A fork of
 
 ## The worktree workflow: plan, merge, push, pull
 
-The buttons send `/plan`, `/merge`, `/push` and `/pull`. `/plan` is built into Claude Code.
-The other three are **custom commands**: copy them from [examples/commands](examples/commands)
-into `~/.claude/commands/`, and [examples/git-merge-lock.sh](examples/git-merge-lock.sh) into
-`~/.claude/`, then add the buttons in your config. They assume each task runs in its own git
-worktree (Claude Code's `EnterWorktree`), with `main` as the shared checkout:
+The default buttons are `plan`, `merge`, `push` and `pull`. Nothing to install: `/plan` is built
+into Claude Code, and the other three ship inside the plugin as `/overclauditor:merge`,
+`/overclauditor:push` and `/overclauditor:pull`, loaded into each session the plugin starts
+(`claude --plugin-dir`). They never touch `~/.claude` and disappear with the plugin. You can
+also type them in any plugin session.
+
+They assume each task runs in its own git worktree (Claude Code's `EnterWorktree`), with `main`
+as the shared checkout:
 
 | Command | Direction | What it does |
 |---|---|---|
 | `/plan` | | Puts the session in plan mode, or shows the current plan. |
-| `/pull` | main → worktree | Merges main into your worktree and builds, so you work on current code. Nothing goes back. |
-| `/merge` | worktree → main | Merges main into the worktree first and fixes conflicts there, then (under a lock, so parallel sessions don't collide) merges into main, pushes, builds main. The session leaves the worktree. |
-| `/push` | worktree → main, then back | `/merge`, then the session goes back into the same worktree to keep working. |
+| `/overclauditor:pull` | main → worktree | Merges main into your worktree and builds, so you work on current code. Nothing goes back. |
+| `/overclauditor:merge` | worktree → main | Merges main into the worktree first and fixes conflicts there, then (under a lock, so parallel sessions don't collide) merges into main, pushes, builds main. The session leaves the worktree. |
+| `/overclauditor:push` | worktree → main, then back | Merge, then the session goes back into the same worktree to keep working. |
 
-The conflict work always happens in your worktree, never in the shared main checkout, and a
-failed `git push` never undoes a merge. Edit the "build" steps in the examples to your
-project's build command.
+Conflict work always happens in your worktree, never in the shared main checkout, and a failed
+`git push` never undoes a merge. "Build" means your project's usual build; Claude works out
+which. Have your own `/merge` already? Point the buttons at it in the config (see
+[docs/SETUP.md](docs/SETUP.md)); `"bundledCommands": false` stops loading the bundled ones.
 
 ## License
 

@@ -28,7 +28,7 @@ a lock. Never leave the target conflicted or broken.
 
 5. **Lock, then merge the target:**
 
-       bash ~/.claude/git-merge-lock.sh acquire <main-repo-root>
+       bash "${CLAUDE_PLUGIN_ROOT}/scripts/git-merge-lock.sh" acquire <main-repo-root>
 
    On timeout, report that another session holds the lock and stop. With the lock:
    a. If `git -C <target-dir> rev-parse HEAD` moved since step 2, release and go back to 2.
@@ -36,7 +36,7 @@ a lock. Never leave the target conflicted or broken.
       step 2; if not, `merge --abort`, release, start over).
    c. `git -C <target-dir> push origin <target-branch>`. A failed push does NOT undo the
       merge: report it and move on.
-   d. Always release: `bash ~/.claude/git-merge-lock.sh release <main-repo-root>`.
+   d. Always release: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/git-merge-lock.sh" release <main-repo-root>`.
 
 6. **Build the target** so what the user runs next is the merged code.
 

@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class OverclauditorConfigTest {
     private fun parse(json: String) = OverclauditorConfig.parse(JsonParser.parseString(json).asJsonObject)
@@ -42,7 +43,8 @@ class OverclauditorConfigTest {
     @Test
     fun `defaults for an empty config`() {
         val c = parse("{}")
-        assertEquals(listOf("/plan\r"), c.buttons.map { it.send })
+        assertEquals(listOf("/plan\r", "/overclauditor:merge\r", "/overclauditor:push\r", "/overclauditor:pull\r"), c.buttons.map { it.send })
+        assertTrue(c.bundledCommands)
         assertEquals(OverclauditorConfig.SummarySource.BUILTIN, c.summarySource)
         assertNull(c.summaryFile)
         assertFalse(c.hideTerminalStatusLine)
