@@ -1,10 +1,10 @@
 <idea-plugin>
     <id>com.overclauditor</id>
     <name>Overclauditor</name>
-    <vendor url="https://github.com/dainedwards/overclauditor">dainedwards</vendor>
+    <vendor url="https://github.com/slowburn-hq/overclauditor">Slowburn</vendor>
 
     <description><![CDATA[
-    <p><b>Overclauditor</b> is a fork of <a href="https://github.com/bdkent/clauditor">Clauditor</a> by bdkent, adding colour-coded model and effort dropdowns, a session summary, configurable command buttons, usage and prompt-cache bars, pinned tab titles and a much faster session list. See <a href="https://github.com/dainedwards/overclauditor">github.com/dainedwards/overclauditor</a>.</p><p>Clauditor manages your Claude Code sessions from inside your JetBrains IDE. Browse, search, resume, and fork sessions; run them in git worktrees; and watch their status live — without leaving the editor or juggling terminal windows.</p>
+    <p><b>Overclauditor</b> is a fork of <a href="https://github.com/bdkent/clauditor">Clauditor</a> by bdkent, adding colour-coded model and effort dropdowns, a session summary, configurable command buttons, usage and prompt-cache bars, pinned tab titles and a much faster session list. See <a href="https://github.com/slowburn-hq/overclauditor">github.com/slowburn-hq/overclauditor</a>.</p><p>Clauditor manages your Claude Code sessions from inside your JetBrains IDE. Browse, search, resume, and fork sessions; run them in git worktrees; and watch their status live — without leaving the editor or juggling terminal windows.</p>
 
     <p><b>Session Management</b></p>
     <ul>
@@ -65,7 +65,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
-    <p>See <a href="https://github.com/dainedwards/overclauditor/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
+    <p>See <a href="https://github.com/slowburn-hq/overclauditor/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
     ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
