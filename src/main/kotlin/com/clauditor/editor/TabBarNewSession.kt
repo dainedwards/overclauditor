@@ -41,6 +41,7 @@ class NewClaudeSessionAction : AnAction("New Claude Session", "Start a new Claud
  */
 class TabBarNewSessionActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
+        com.clauditor.util.ClauditorExecutor.submit { com.clauditor.util.OcPaths.sweepStaleTempFiles() }
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
             installAll(project)

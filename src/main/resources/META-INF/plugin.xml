@@ -154,6 +154,10 @@
         <postStartupActivity implementation="com.clauditor.editor.TabBarNewSessionActivity"/>
     </extensions>
 
+    <applicationListeners>
+        <listener class="com.clauditor.util.OcPaths$CleanupOnUnload" topic="com.intellij.ide.plugins.DynamicPluginListener"/>
+    </applicationListeners>
+
     <actions>
         <action id="Overclauditor.NewSession" class="com.clauditor.editor.NewClaudeSessionAction">
             <add-to-group group-id="EditorTabPopupMenu" anchor="first"/>

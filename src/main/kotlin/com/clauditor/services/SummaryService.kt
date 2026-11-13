@@ -16,13 +16,14 @@ import java.util.concurrent.TimeUnit
  * The built-in session summary (summary.source "builtin"): two lines, what the session is
  * about and what to check for the latest request, from a background `claude -p --model haiku`
  * run. Regenerated only when the recent prompts change, at most one run per session at a time.
- * Written to ~/.overclauditor/summary/<sessionId>.summary.
+ * Written to the IDE system folder (OcPaths)/summary/<sessionId>.summary. Runs with
+ * --no-session-persistence so no transcript lands in ~/.claude/projects.
  */
 object SummaryService {
     private val log = Logger.getInstance(SummaryService::class.java)
-    private val dir: Path = Path.of(System.getProperty("user.home"), ".overclauditor", "summary")
-    /** The summarizer's own cwd, so its throwaway sessions stay out of real projects' resume lists. */
-    private val agentCwd: Path = dir.resolve("agent")
+    private val dir: Path by lazy { com.clauditor.util.OcPaths.dataDir.resolve("summary") }
+    /** The summarizer's cwd: a folder of ours, never a real project. */
+    private val agentCwd: Path by lazy { dir.resolve("agent") }
     private val running: MutableSet<String> = ConcurrentHashMap.newKeySet()
     /** Transcript size at the last check: nothing new appended means nothing to do. */
     private val checkedSize = ConcurrentHashMap<String, Long>()
@@ -44,11 +45,12 @@ object SummaryService {
         if (!running.add(sessionId)) return
         com.clauditor.util.ClauditorExecutor.submit {
             try {
-                Files.createDirectories(agentCwd)
+                Files.createDirectories(agentCwd)  // also creates dir
                 val claude = com.clauditor.settings.ClauditorSettings.getInstance().resolveClaudeBinary()
-                val proc = ProcessBuilder(claude, "-p", "--model", "haiku", "--settings", "{\"disableAllHooks\":true}", PROMPT + input)
+                val proc = ProcessBuilder(claude, "-p", "--no-session-persistence", "--model", "haiku", "--settings", "{\"disableAllHooks\":true}", PROMPT + input)
                     .directory(agentCwd.toFile())
-                    .redirectErrorStream(false)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .also { it.environment()["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1" }  // no memory folder under ~/.claude/projects
                     .start()
                 val out = proc.inputStream.bufferedReader().readText()
                 if (!proc.waitFor(90, TimeUnit.SECONDS)) { proc.destroyForcibly(); return@submit }

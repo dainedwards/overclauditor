@@ -80,12 +80,18 @@ background). Open a session: the toolbar shows model and effort dropdowns, branc
 your buttons; the bottom bar shows usage, cache and context. Usage bars need the CLI's OAuth
 login (macOS keychain item "Claude Code-credentials", or `~/.claude/.credentials.json`).
 
-## Where things live
+## Where things live, and what uninstalling leaves
 
-| Path | What |
-|---|---|
-| `~/.overclauditor/config.json` | this config |
-| `~/.overclauditor/repo/` | the local plugin repository the IDE updates from |
-| `~/.overclauditor/session-index/` | saved session-list scan positions (safe to delete) |
-| `~/.overclauditor/titles.json` | pinned tab titles |
-| `~/.overclauditor/summary/` | built-in summaries |
+The plugin installs nothing outside the IDE and never edits the user's Claude settings: it
+passes its status-line capture and hooks to the sessions it starts with `claude --settings
+<temp file>`, deleted when the session closes.
+
+| Path | What | On uninstall |
+|---|---|---|
+| `~/.overclauditor/config.json` | this config, written by the user | kept (theirs to delete) |
+| IDE system folder `/overclauditor/` | session-list index, pinned titles, built-in summaries | deleted |
+| temp folder `clauditor-*` | per-session status capture | deleted when sessions close; leftovers swept at startup and on uninstall |
+
+Built-in summaries run `claude -p --no-session-persistence` with auto-memory off, so they add
+nothing under `~/.claude/projects`. Developer-only (`tools/publish-local.sh`):
+`~/.overclauditor/repo/`, the local plugin repository.

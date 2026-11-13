@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * The title each session's tab and list row show, pinned so it changes only on a few events
  * (see ClaudeSessionEditor.retitle): a new worktree, the first file write, an explicit
- * /rename, or a new title from the CLI itself. Kept in ~/.overclauditor/titles.json.
+ * /rename, or a new title from the CLI itself. Kept in the IDE's system folder (OcPaths).
  */
 object TitleStore {
     data class Entry(
@@ -25,7 +25,7 @@ object TitleStore {
         val renamed: String? = null
     )
 
-    private val file: Path = Path.of(System.getProperty("user.home"), ".overclauditor", "titles.json")
+    private val file: Path by lazy { com.clauditor.util.OcPaths.dataDir.resolve("titles.json") }
     private val gson = Gson()
     private val entries: MutableMap<String, Entry> by lazy {
         val m = ConcurrentHashMap<String, Entry>()

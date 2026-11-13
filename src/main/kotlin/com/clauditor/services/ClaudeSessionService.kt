@@ -63,7 +63,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
 
     private val indexFile: Path by lazy {
         val key = Integer.toHexString((project.basePath ?: project.name).hashCode())
-        Path.of(System.getProperty("user.home"), ".overclauditor", "session-index", "$key.v2.json")
+        com.clauditor.util.OcPaths.dataDir.resolve("session-index").resolve("$key.v2.json")
     }
 
     private val savedIndex: Map<String, IndexEntry> by lazy {
