@@ -24,6 +24,7 @@ class ClauditorSettingsConfigurable : Configurable {
     private var claudeBinaryField: JBTextField? = null
     private var defaultArgsField: JBTextField? = null
     private var envColortermCheckbox: JBCheckBox? = null
+    private var worktreeToolbarCheckbox: JBCheckBox? = null
     private var envDisableTrafficCheckbox: JBCheckBox? = null
     private var envSkipUpdateCheckbox: JBCheckBox? = null
     private var envDisableCachingCheckbox: JBCheckBox? = null
@@ -61,6 +62,7 @@ class ClauditorSettingsConfigurable : Configurable {
             toolTipText = "Maximum concurrent threads in the Clauditor background pool (git polling, status checks). Each open session tab can use up to 2; raise if you see warnings about a saturated pool. Default 16 covers ~8 session tabs across multiple windows."
         }
 
+        worktreeToolbarCheckbox = JBCheckBox("Show the worktree bar in worktree session tabs (Commit, Update, Merge, Show Changes). Applies to tabs opened after the change")
         envColortermCheckbox = JBCheckBox("COLORTERM=truecolor — Enable true color support in terminal output")
         envDisableTrafficCheckbox = JBCheckBox("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 — Disable telemetry")
         envSkipUpdateCheckbox = JBCheckBox("CLAUDE_CODE_SKIP_UPDATE_CHECK=1 — Skip update check on launch")
@@ -104,6 +106,7 @@ class ClauditorSettingsConfigurable : Configurable {
                 border = JBUI.Borders.emptyTop(8)
             })
             .addComponent(envDocsLink)
+            .addComponent(worktreeToolbarCheckbox!!)
             .addComponent(envColortermCheckbox!!)
             .addComponent(envDisableTrafficCheckbox!!)
             .addComponent(envSkipUpdateCheckbox!!)
@@ -122,6 +125,7 @@ class ClauditorSettingsConfigurable : Configurable {
             claudeBinaryField?.text?.trim() != settings.state.claudeBinaryPath ||
             defaultArgsField?.text?.trim() != settings.state.defaultSessionArgs ||
             envColortermCheckbox?.isSelected != settings.state.envColorterm ||
+            worktreeToolbarCheckbox?.isSelected != settings.state.showWorktreeToolbar ||
             envDisableTrafficCheckbox?.isSelected != settings.state.envDisableNonessentialTraffic ||
             envSkipUpdateCheckbox?.isSelected != settings.state.envSkipUpdateCheck ||
             envDisableCachingCheckbox?.isSelected != settings.state.envDisablePromptCaching ||
@@ -137,6 +141,7 @@ class ClauditorSettingsConfigurable : Configurable {
         settings.state.claudeBinaryPath = claudeBinaryField?.text?.trim() ?: ""
         settings.state.defaultSessionArgs = defaultArgsField?.text?.trim() ?: ""
         settings.state.envColorterm = envColortermCheckbox?.isSelected ?: false
+        settings.state.showWorktreeToolbar = worktreeToolbarCheckbox?.isSelected ?: false
         settings.state.envDisableNonessentialTraffic = envDisableTrafficCheckbox?.isSelected ?: false
         settings.state.envSkipUpdateCheck = envSkipUpdateCheckbox?.isSelected ?: false
         settings.state.envDisablePromptCaching = envDisableCachingCheckbox?.isSelected ?: false
@@ -152,6 +157,7 @@ class ClauditorSettingsConfigurable : Configurable {
         claudeBinaryField?.text = settings.state.claudeBinaryPath
         defaultArgsField?.text = settings.state.defaultSessionArgs
         envColortermCheckbox?.isSelected = settings.state.envColorterm
+        worktreeToolbarCheckbox?.isSelected = settings.state.showWorktreeToolbar
         envDisableTrafficCheckbox?.isSelected = settings.state.envDisableNonessentialTraffic
         envSkipUpdateCheckbox?.isSelected = settings.state.envSkipUpdateCheck
         envDisableCachingCheckbox?.isSelected = settings.state.envDisablePromptCaching
@@ -167,6 +173,7 @@ class ClauditorSettingsConfigurable : Configurable {
         claudeBinaryField = null
         defaultArgsField = null
         envColortermCheckbox = null
+        worktreeToolbarCheckbox = null
         envDisableTrafficCheckbox = null
         envSkipUpdateCheckbox = null
         envDisableCachingCheckbox = null

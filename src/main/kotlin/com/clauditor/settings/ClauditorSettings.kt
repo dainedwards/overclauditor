@@ -46,6 +46,12 @@ class ClauditorSettings : PersistentStateComponent<ClauditorSettings.State> {
          * a warning is logged so this can be tuned upward.
          */
         @JvmField var backgroundPoolMaxThreads: Int = 16
+
+        /**
+         * Clauditor's per-tab worktree bar (Commit / Update / Merge / Show Changes / Open in…).
+         * Off: the bar is never built, so none of its git polling runs.
+         */
+        @JvmField var showWorktreeToolbar: Boolean = false
     }
 
     private var myState = State()

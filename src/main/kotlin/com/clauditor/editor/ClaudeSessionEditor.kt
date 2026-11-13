@@ -382,8 +382,11 @@ class ClaudeSessionEditor(
         val topPanel = JPanel().apply {
             layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS)
             add(toolbar)
-            // Clauditor's worktree bar (Commit / Update-by-rebase / Merge / Open in IDE) is left
-            // out: /merge, /push and /pull on the main row do those jobs with build + import.
+            // Clauditor's worktree bar is off by default (/merge, /push, /pull on the main row do
+            // its jobs with build + import). Not built at all when off, so it polls nothing.
+            if (file.isWorktreeSession && com.clauditor.settings.ClauditorSettings.getInstance().state.showWorktreeToolbar) {
+                add(createWorktreeToolbar())
+            }
         }
 
         val contentPanel = JPanel(BorderLayout())
