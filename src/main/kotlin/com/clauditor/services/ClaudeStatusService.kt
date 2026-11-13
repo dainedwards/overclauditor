@@ -319,6 +319,12 @@ class ClaudeStatusService(private val project: Project) : Disposable {
         schedulePoll()
     }
 
+    /** "1h" / "5m" / "300s" → seconds. */
+    private fun parseTtl(ttl: String): Long? {
+        val n = ttl.dropLast(1).toLongOrNull() ?: return null
+        return when (ttl.last()) { 'h' -> n * 3600; 'm' -> n * 60; 's' -> n; else -> null }
+    }
+
     private fun parseStatus(json: String): ClaudeStatus? {
         return try {
             val obj = gson.fromJson(json, JsonObject::class.java)
@@ -342,6 +348,7 @@ class ClaudeStatusService(private val project: Project) : Disposable {
             val sevenDay = rates?.getAsJsonObject("seven_day")
             val effort = obj.getAsJsonObject("effort")
             val thinking = obj.getAsJsonObject("thinking")
+            val cache = obj.get("prompt_cache")?.takeIf { it.isJsonObject }?.asJsonObject
             ClaudeStatus(
                 modelId = modelId,
                 modelName = modelName,
@@ -358,7 +365,9 @@ class ClaudeStatusService(private val project: Project) : Disposable {
                 effortLevel = effort?.get("level")?.asString,
                 thinkingEnabled = thinking?.get("enabled")?.asBoolean,
                 reportedSessionId = obj.get("session_id")?.asString,
-                cwd = obj.getAsJsonObject("workspace")?.get("current_dir")?.asString ?: obj.get("cwd")?.asString
+                cwd = obj.getAsJsonObject("workspace")?.get("current_dir")?.asString ?: obj.get("cwd")?.asString,
+                cacheExpiresAt = cache?.get("expires_at")?.takeIf { it.isJsonPrimitive }?.asLong,
+                cacheTtlSeconds = cache?.get("ttl")?.takeIf { it.isJsonPrimitive }?.asString?.let(::parseTtl)
             )
         } catch (_: Exception) {
             null

@@ -22,5 +22,8 @@ data class ClaudeStatus(
      */
     val reportedSessionId: String? = null,
     /** The CLI's current working directory (moves when the session enters a worktree). */
-    val cwd: String? = null
+    val cwd: String? = null,
+    /** prompt_cache.expires_at (epoch seconds) and its TTL in seconds. */
+    val cacheExpiresAt: Long? = null,
+    val cacheTtlSeconds: Long? = null
 )

@@ -98,9 +98,13 @@ class ClaudeSessionEditor(
         preferredSize = java.awt.Dimension(JBUI.scale(150), preferredSize.height)
         toolTipText = "Prompt cache: time left before the next prompt re-reads the whole context"
     }
-    @Volatile private var lastReplyAt: java.time.Instant? = null
+    @Volatile private var cacheExpiresAt: java.time.Instant? = null
     @Volatile private var cacheTtl: java.time.Duration = java.time.Duration.ofHours(1)
-    private val cacheScanInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** Plan usage bars (5h, 7d, per-model weekly), rebuilt when ClaudeUsageService reports. */
+    private val usagePanel = JPanel().apply {
+        layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.X_AXIS)
+        isOpaque = false
+    }
     private val effortLabel = JBLabel("").apply {
         border = JBUI.Borders.empty(0, 6)
         foreground = UIManager.getColor("Label.disabledForeground")
@@ -151,6 +155,8 @@ class ClaudeSessionEditor(
             add(JBLabel(AllIcons.Vcs.History).apply { border = JBUI.Borders.empty(0, 2, 0, 2); alignmentY = 0.5f })
             cacheProgress.alignmentY = 0.5f
             add(cacheProgress)
+            usagePanel.alignmentY = 0.5f
+            add(usagePanel)
         }
         add(cachePanel, BorderLayout.WEST)
         add(contextProgress, BorderLayout.CENTER)
@@ -405,6 +411,8 @@ class ClaudeSessionEditor(
                     file.notifyState = newNotify
                 }
                 refreshTabTitle()
+                status?.cacheExpiresAt?.let { cacheExpiresAt = java.time.Instant.ofEpochSecond(it) }
+                status?.cacheTtlSeconds?.let { cacheTtl = java.time.Duration.ofSeconds(it) }
                 updateContextBar(status)
 
                 // Notify when a non-focused tab needs attention
@@ -1491,28 +1499,64 @@ class ClaudeSessionEditor(
         }
     }
 
-    /** Tick the cache bar each second; rescan the transcript tail every few seconds. */
+    /** Tick the cache bar each second while the tab is on screen; subscribe to plan usage. */
     private fun startCacheTimer() {
-        var ticks = 0
-        val timer = javax.swing.Timer(1000) {
-            if (!tabShowing) return@Timer
-            if (ticks++ % 5 == 0) scanCacheState()
-            paintCacheBar()
-        }
+        val timer = javax.swing.Timer(1000) { if (tabShowing) paintCacheBar() }
         timer.initialDelay = 0
         timer.start()
         Disposer.register(sessionDisposable, Disposable { timer.stop() })
+
+        val usage = com.clauditor.services.ClaudeUsageService.getInstance()
+        val listener: () -> Unit = { rebuildUsageBars(usage.limits) }
+        usage.addListener(listener)
+        Disposer.register(sessionDisposable, Disposable { usage.removeListener(listener) })
+    }
+
+    private fun rebuildUsageBars(limits: List<com.clauditor.services.ClaudeUsageService.Limit>) {
+        usagePanel.removeAll()
+        for (l in limits) {
+            val pct = l.percent
+            usagePanel.add(JProgressBar(0, 100).apply {
+                setUI(RoundedProgressBarUI())
+                isStringPainted = true
+                isOpaque = false
+                border = JBUI.Borders.empty(5, 3)
+                value = pct?.toInt()?.coerceIn(0, 100) ?: 0
+                string = if (pct == null) "${l.label} —" else "${l.label} ${pct.toInt()}%"
+                foreground = when {
+                    pct == null || pct < 50 -> COLOR_GREEN
+                    pct < 80 -> COLOR_YELLOW
+                    else -> COLOR_RED
+                }
+                preferredSize = java.awt.Dimension(JBUI.scale(95), preferredSize.height)
+                maximumSize = preferredSize
+                alignmentY = 0.5f
+                toolTipText = l.resetsAt?.let { "${l.label}: resets in ${formatSpan(java.time.Duration.between(java.time.Instant.now(), it))}" }
+                    ?: "${l.label}: no active window"
+            })
+        }
+        usagePanel.revalidate()
+        usagePanel.repaint()
+    }
+
+    private fun formatSpan(d: java.time.Duration): String {
+        val m = d.toMinutes().coerceAtLeast(0)
+        return when {
+            m >= 1440 -> "${m / 1440}d ${(m % 1440) / 60}h"
+            m >= 60 -> "${m / 60}h ${m % 60}m"
+            else -> "${m}m"
+        }
     }
 
     private fun paintCacheBar() {
-        val at = lastReplyAt
-        if (at == null) {
+        val exp = cacheExpiresAt
+        if (exp == null) {
             cacheProgress.value = 0
             cacheProgress.string = "Cache: —"
             return
         }
         val ttl = cacheTtl.toMillis()
-        val left = (ttl - java.time.Duration.between(at, java.time.Instant.now()).toMillis()).coerceAtLeast(0)
+        val left = java.time.Duration.between(java.time.Instant.now(), exp).toMillis().coerceIn(0, ttl)
         val frac = left.toDouble() / ttl
         cacheProgress.value = (frac * 1000).toInt()
         val secs = left / 1000
@@ -1521,49 +1565,6 @@ class ClaudeSessionEditor(
             frac > 0.5 -> COLOR_GREEN
             frac > 0.2 -> COLOR_YELLOW
             else -> COLOR_RED
-        }
-    }
-
-    /**
-     * The newest assistant line's timestamp is the last cache refresh; the newest line that
-     * WROTE cache says which TTL it used (1h vs 5m tokens in usage.cache_creation).
-     */
-    private fun scanCacheState() {
-        val path = transcriptPath() ?: return
-        if (!cacheScanInFlight.compareAndSet(false, true)) return
-        com.clauditor.util.ClauditorExecutor.submit {
-            try {
-                val tail = java.io.RandomAccessFile(path.toFile(), "r").use { raf ->
-                    val len = raf.length()
-                    val start = (len - 512 * 1024).coerceAtLeast(0)
-                    raf.seek(start)
-                    val buf = ByteArray((len - start).toInt())
-                    raf.readFully(buf)
-                    String(buf, Charsets.UTF_8)
-                }
-                var replyAt: java.time.Instant? = null
-                var ttl: java.time.Duration? = null
-                for (line in tail.lineSequence().toList().asReversed()) {
-                    if (!line.contains("\"type\":\"assistant\"")) continue
-                    val obj = try { com.google.gson.JsonParser.parseString(line).asJsonObject } catch (_: Exception) { continue }
-                    if (obj.get("type")?.asString != "assistant") continue
-                    val usage = obj.getAsJsonObject("message")?.getAsJsonObject("usage") ?: continue
-                    if (replyAt == null) {
-                        replyAt = obj.get("timestamp")?.asString?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
-                    }
-                    val cc = usage.getAsJsonObject("cache_creation")
-                    val h1 = cc?.get("ephemeral_1h_input_tokens")?.asLong ?: 0
-                    val m5 = cc?.get("ephemeral_5m_input_tokens")?.asLong ?: 0
-                    if (h1 > 0) ttl = java.time.Duration.ofHours(1)
-                    else if (m5 > 0) ttl = java.time.Duration.ofMinutes(5)
-                    if (replyAt != null && ttl != null) break
-                }
-                replyAt?.let { lastReplyAt = it }
-                ttl?.let { cacheTtl = it }
-            } catch (_: Exception) {
-            } finally {
-                cacheScanInFlight.set(false)
-            }
         }
     }
 
