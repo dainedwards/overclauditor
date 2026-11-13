@@ -48,6 +48,9 @@ into Claude Code, and the other three ship inside the plugin as `/overclauditor:
 (`claude --plugin-dir`). They never touch `~/.claude` and disappear with the plugin. You can
 also type them in any plugin session.
 
+A button or dropdown never sends your half-typed prompt along with its command: the draft is
+stashed first (Claude Code's ctrl+s) and comes back in the input box once the command has run.
+
 They assume each task runs in its own git worktree (Claude Code's `EnterWorktree`), with `main`
 as the shared checkout:
 

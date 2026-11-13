@@ -71,6 +71,7 @@ class ClaudeSessionEditor(
     private var currentContent: JComponent? = null
     private var focusComponent: JComponent? = null
     private var ptyProcess: PtyProcess? = null
+    private var terminalWidget: com.intellij.terminal.JBTerminalWidget? = null
     private var historyPanel: MessageHistoryPanel? = null
     private var historySplitter: JBSplitter? = null
     @Volatile private var lastTitle: String? = null
@@ -339,6 +340,7 @@ class ClaudeSessionEditor(
         }
 
         ptyProcess = session.process
+        terminalWidget = session.widget
         focusComponent = session.widget.preferredFocusableComponent
 
         // Normal exit (0): close the tab. Abnormal exit: keep it open so the error is visible.
@@ -1285,7 +1287,7 @@ class ClaudeSessionEditor(
     }
 
     private fun runButton(b: com.clauditor.services.OverclauditorConfig.Button) {
-        if (b.builtin != com.clauditor.services.OverclauditorConfig.COPY_LAST_CODE_BLOCK) { sendToTerminal(b.send); return }
+        if (b.builtin != com.clauditor.services.OverclauditorConfig.COPY_LAST_CODE_BLOCK) { sendCommand(b.send); return }
         val path = transcriptPath() ?: return
         com.clauditor.util.ClauditorExecutor.submit {
             val text = com.clauditor.util.LastReply.copyText(path)
@@ -1335,7 +1337,7 @@ class ClaudeSessionEditor(
         combo.addActionListener {
             if (updating) return@addActionListener
             val selected = combo.selectedItem as? String ?: return@addActionListener
-            sendToTerminal("/effort $selected\r")
+            sendCommand("/effort $selected\r")
         }
 
         val statusService = ClaudeStatusService.getInstance(project)
@@ -1379,7 +1381,7 @@ class ClaudeSessionEditor(
         combo.addActionListener {
             if (updating) return@addActionListener
             val selected = combo.selectedItem as? String ?: return@addActionListener
-            sendToTerminal("/model $selected\r")
+            sendCommand("/model $selected\r")
         }
 
         // Sync selection when status updates report a different model
@@ -1453,6 +1455,26 @@ class ClaudeSessionEditor(
                 }
             }
         })
+    }
+
+    /**
+     * A button or dropdown's input. A slash command typed after a half-written prompt would be
+     * appended to it and submitted with it, so a draft is first stashed (ctrl+s): Claude Code
+     * puts it back once the command has run. Ctrl+s on an empty box would instead pop an older
+     * stash, so it is sent only when the input box shows text.
+     */
+    private fun sendCommand(text: String) {
+        val stash = text.startsWith("/") && hasDraft()
+        sendToTerminal(if (stash) "\u0013$text" else text)
+    }
+
+    private fun hasDraft(): Boolean {
+        val buffer = terminalWidget?.terminalTextBuffer ?: return false
+        buffer.lock()
+        val lines = try {
+            (0 until buffer.screenLinesCount).map { buffer.getLine(it).text }
+        } catch (_: Exception) { return false } finally { buffer.unlock() }
+        return draftIn(lines)
     }
 
     fun sendToTerminal(text: String) {
@@ -1940,6 +1962,21 @@ class ClaudeSessionEditor(
     override fun dispose() { Disposer.dispose(rootDisposable) }
 
     companion object {
+        /**
+         * Whether Claude Code's input box (the last "❯" line right under a ─ rule) holds typed
+         * text. The start-up placeholder ('Try "…"') isn't a draft.
+         */
+        internal fun draftIn(screen: List<String>): Boolean {
+            for (i in screen.indices.reversed()) {
+                val line = screen[i].trimEnd()
+                if (!line.startsWith("❯") || i == 0 || !screen[i - 1].trimStart().startsWith("─")) continue
+                val text = line.removePrefix("❯").trim()
+                return text.isNotEmpty() && !PLACEHOLDER.matches(text)
+            }
+            return false
+        }
+        private val PLACEHOLDER = Regex("^Try \"[^\"]*\"$")
+
         /** Green at 0 through yellow and orange to red at 1, so every step of usage shows. */
         private fun rampColor(frac: Double): Color {
             val f = frac.coerceIn(0.0, 1.0).toFloat()
