@@ -106,9 +106,14 @@ class ClaudeSessionEditor(
         isOpaque = false
     }
     /** Session gist + what to test, from the status-line script's Haiku summary cache. */
-    private val summaryLabel = JBLabel("").apply {
+    private var summaryGist = ""
+    private var summaryTest = ""
+    private val summaryLabel: JBLabel = JBLabel("").apply {
         border = JBUI.Borders.empty(0, 8)
-        horizontalAlignment = javax.swing.SwingConstants.CENTER
+        minimumSize = java.awt.Dimension(0, 0)
+        addComponentListener(object : java.awt.event.ComponentAdapter() {
+            override fun componentResized(e: java.awt.event.ComponentEvent) = renderSummary()
+        })
     }
     private var summaryMtime = 0L
     private val thinkingLabel = JBLabel("").apply {
@@ -479,7 +484,6 @@ class ClaudeSessionEditor(
             }
             FileEditorManager.getInstance(project).openFile(forkFile, true)
         }
-        leftPanel.add(forkButton)
 
         reconnectButton = javax.swing.JButton(com.intellij.icons.AllIcons.Actions.Refresh).apply {
             toolTipText = "Reconnect — close and resume this session"
@@ -489,7 +493,6 @@ class ClaudeSessionEditor(
                 restartSession()
             }
         }
-        leftPanel.add(reconnectButton)
 
         val deleteButton = javax.swing.JButton(AllIcons.Actions.GC)
         deleteButton.toolTipText = "Delete this session"
@@ -507,9 +510,18 @@ class ClaudeSessionEditor(
             manager.closeFile(file)
             ClaudeSessionService.getInstance(project).deleteSession(sessionId)
         }
-        leftPanel.add(deleteButton)
 
         val rightPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 4, 2))
+        for (cmd in SLASH_BUTTONS) {
+            rightPanel.add(javax.swing.JButton(cmd).apply {
+                isFocusable = false
+                toolTipText = "Send /$cmd"
+                addActionListener { sendToTerminal("/$cmd\r") }
+            })
+        }
+        rightPanel.add(forkButton)
+        rightPanel.add(reconnectButton)
+        rightPanel.add(deleteButton)
         val historyToggle = javax.swing.JToggleButton("Messages")
         historyToggle.isFocusable = false
         historyToggle.addActionListener {
@@ -554,14 +566,6 @@ class ClaudeSessionEditor(
         val statsLabel = JBLabel("").apply {
             border = JBUI.Borders.empty(0, 4)
             foreground = UIManager.getColor("Label.disabledForeground")
-        }
-
-        val slashButtons = SLASH_BUTTONS.map { cmd ->
-            javax.swing.JButton(cmd).apply {
-                isFocusable = false
-                toolTipText = "Send /$cmd"
-                addActionListener { sendToTerminal("/$cmd\r") }
-            }
         }
 
         val gitRefreshInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -637,10 +641,6 @@ class ClaudeSessionEditor(
             add(branchName)
             add(javax.swing.Box.createHorizontalStrut(8))
             add(statsLabel)
-            slashButtons.forEach {
-                add(javax.swing.Box.createHorizontalStrut(4))
-                add(it)
-            }
         }
 
         val bar = JPanel(BorderLayout())
@@ -1562,15 +1562,30 @@ class ClaudeSessionEditor(
         if (mtime == 0L || mtime == summaryMtime) return
         summaryMtime = mtime
         val lines = try { f.readLines().map { it.trim() } } catch (_: Exception) { return }
-        val gist = lines.getOrNull(0).orEmpty()
-        val test = lines.getOrNull(1).orEmpty()
+        summaryGist = lines.getOrNull(0).orEmpty()
+        summaryTest = lines.getOrNull(1).orEmpty()
+        summaryLabel.toolTipText = listOf(summaryGist, summaryTest).filter { it.isNotEmpty() }.joinToString(" - ")
+        renderSummary()
+    }
+
+    /** One line, "gist - test", cut with … to the space the toolbar leaves so the bar never grows. */
+    private fun renderSummary() {
+        var gist = summaryGist
+        var test = summaryTest
+        val avail = summaryLabel.width - summaryLabel.insets.left - summaryLabel.insets.right
+        val fm = summaryLabel.getFontMetrics(summaryLabel.font.deriveFont(java.awt.Font.BOLD))
+        fun line() = listOf(gist, test).filter { it.isNotEmpty() }.joinToString(" - ")
+        if (avail > 0) {
+            while (test.length > 2 && fm.stringWidth(line()) > avail) test = test.dropLast(2).trimEnd() + "…"
+            if (test.length <= 2 && fm.stringWidth(line()) > avail) test = ""
+            while (gist.length > 2 && fm.stringWidth(line()) > avail) gist = gist.dropLast(2).trimEnd() + "…"
+        }
         fun esc(t: String) = com.intellij.openapi.util.text.StringUtil.escapeXmlEntities(t)
-        summaryLabel.text = "<html><div style='text-align:center'>" +
+        summaryLabel.text = if (gist.isEmpty() && test.isEmpty()) "" else "<html><nobr>" +
             (if (gist.isNotEmpty()) "<span style='color:#2AA198'>${esc(gist)}</span>" else "") +
-            (if (gist.isNotEmpty() && test.isNotEmpty()) "<br>" else "") +
+            (if (gist.isNotEmpty() && test.isNotEmpty()) " - " else "") +
             (if (test.isNotEmpty()) "<span style='color:#5FD7FF'><b>${esc(test)}</b></span>" else "") +
-            "</div></html>"
-        summaryLabel.toolTipText = listOf(gist, test).filter { it.isNotEmpty() }.joinToString("\n")
+            "</nobr></html>"
     }
 
     private fun paintCacheBar() {
