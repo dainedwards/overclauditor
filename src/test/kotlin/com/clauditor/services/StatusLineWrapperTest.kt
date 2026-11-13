@@ -13,7 +13,10 @@ class StatusLineWrapperTest {
     private fun run(original: String?, hide: String?): Pair<String, String?> {
         val script = Files.createTempFile("wrapper", ".sh").also { Files.writeString(it, ClaudeStatusService.wrapperScriptText()) }
         val status = Files.createTempFile("status", ".json").also { Files.delete(it) }
-        val pb = ProcessBuilder("bash", script.toString())
+        // On Windows, Claude Code runs commands in Git Bash; a bare "bash" from Java can be WSL's.
+        val gitBash = java.io.File("C:\\Program Files\\Git\\bin\\bash.exe")
+        val bash = if (com.clauditor.util.ProcessHelper.IS_WINDOWS && gitBash.isFile) gitBash.path else "bash"
+        val pb = ProcessBuilder(bash, script.toString().replace('\\', '/'))
         pb.environment().apply {
             put("CLAUDITOR_STATUS_FILE", status.toString())
             if (original != null) put("CLAUDITOR_ORIGINAL_STATUSLINE", original) else remove("CLAUDITOR_ORIGINAL_STATUSLINE")
@@ -21,9 +24,10 @@ class StatusLineWrapperTest {
         }
         val p = pb.start()
         p.outputStream.use { it.write("""{"model":{"id":"m"}}""".toByteArray()) }
-        val out = p.inputStream.bufferedReader().readText()
+        val out = p.inputStream.bufferedReader().readText().replace("\r\n", "\n")
+        val err = p.errorStream.bufferedReader().readText()
         assertTrue(p.waitFor(10, TimeUnit.SECONDS))
-        assertEquals(0, p.exitValue(), "wrapper must always exit 0")
+        assertEquals(0, p.exitValue(), "wrapper must always exit 0; stderr: $err")
         return out to (if (Files.exists(status)) Files.readString(status).trim() else null)
     }
 

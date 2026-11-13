@@ -1,0 +1,4 @@
+# Bash scripts and the bundled Claude Code plugin must keep LF line endings on every OS:
+# a Windows checkout's CRLF breaks bash ("\r: command not found") and markdown frontmatter.
+*.sh text eol=lf
+src/main/resources/claude-plugin/** text eol=lf

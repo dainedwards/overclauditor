@@ -9,7 +9,15 @@ import kotlin.test.assertTrue
 
 /** The Claude Code plugin shipped in the jar and loaded with --plugin-dir. */
 class BundledCommandsTest {
-    private fun res(rel: String) = javaClass.getResourceAsStream("/claude-plugin/$rel")?.use { String(it.readBytes()) }
+    private fun raw(rel: String) = javaClass.getResourceAsStream("/claude-plugin/$rel")?.use { String(it.readBytes()) }
+    private fun res(rel: String) = raw(rel)
+
+    @Test
+    fun `bundled files use LF line endings (CRLF breaks the bash script and frontmatter)`() {
+        for (f in listOf("commands/merge.md", "commands/push.md", "commands/pull.md", "scripts/git-merge-lock.sh", ".claude-plugin/plugin.json")) {
+            assertFalse(raw(f)!!.contains('\r'), "$f has CRLF line endings; .gitattributes should force LF")
+        }
+    }
 
     @Test
     fun `manifest names the plugin overclauditor, so commands are slash-overclauditor-colon-x`() {
