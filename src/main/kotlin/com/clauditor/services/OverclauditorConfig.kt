@@ -22,7 +22,7 @@ object OverclauditorConfig {
         val summarySource: SummarySource,
         /** For FILE: path with {sessionId}, line 1 the gist, line 2 what to test. */
         val summaryFile: String?,
-        /** Blank the terminal's status line (the toolbar shows its information instead). */
+        /** Blank the user's own status line in plugin sessions (the toolbar shows the same information). */
         val hideTerminalStatusLine: Boolean
     )
 
@@ -32,7 +32,7 @@ object OverclauditorConfig {
         buttons = listOf(Button("plan", null, "Send /plan", "/plan\r")),
         summarySource = SummarySource.BUILTIN,
         summaryFile = null,
-        hideTerminalStatusLine = true
+        hideTerminalStatusLine = false
     )
 
     @Volatile private var cached: Config = DEFAULT

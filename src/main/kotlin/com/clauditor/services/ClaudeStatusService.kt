@@ -77,17 +77,21 @@ class ClaudeStatusService(private val project: Project) : Disposable {
             // itself runs it — honoring tilde, \$VARs, quotes, and pipes. A bare
             // `\$CLAUDITOR_ORIGINAL_STATUSLINE` only word-splits/globs, which breaks
             // any command using ~, \$HOME, quoted paths, or pipes.
-            // CLAUDITOR_HIDE_STATUSLINE=1 (config hideTerminalStatusLine): still run the user's
-            // command for its side effects (caches, breadcrumbs) but print only an SGR reset.
-            // No output at all leaves Claude Code holding a blank status row under the prompt;
-            // a zero-width escape collapses it. Otherwise chain the output through unchanged.
+            // The user's status line shows as usual unless CLAUDITOR_HIDE_STATUSLINE=1 (config
+            // hideTerminalStatusLine), which still runs it for its side effects (caches,
+            // breadcrumbs) but prints nothing of it. Whenever nothing of the user's is shown
+            // (hidden, or they have none and this wrapper only exists to capture status), print
+            // an SGR reset: empty output leaves Claude Code holding a blank row under the
+            // prompt, while a zero-width escape collapses it.
             appendLine("  if [ \"\$CLAUDITOR_HIDE_STATUSLINE\" = 1 ]; then")
             appendLine("    echo \"\$input\" | eval \"\$CLAUDITOR_ORIGINAL_STATUSLINE\" >/dev/null 2>&1")
+            appendLine("    printf '\\033[0m'")
             appendLine("  else")
             appendLine("    echo \"\$input\" | eval \"\$CLAUDITOR_ORIGINAL_STATUSLINE\"")
             appendLine("  fi")
+            appendLine("else")
+            appendLine("  printf '\\033[0m'")
             appendLine("fi")
-            appendLine("[ \"\$CLAUDITOR_HIDE_STATUSLINE\" = 1 ] && printf '\\033[0m'")
             appendLine("exit 0")
         })
         script.toFile().setExecutable(true)

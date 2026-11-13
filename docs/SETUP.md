@@ -26,8 +26,9 @@ An agent can do every step except the IDE clicks; ask the user for those.
 
 ## 3. Configure: `~/.overclauditor/config.json`
 
-Optional. Without it you get: a `plan` button, the built-in summary, the terminal status line
-hidden. Read live; edits apply to tabs opened afterwards (buttons) or within seconds (summary).
+Optional. Without it you get: a `plan` button, the built-in summary, and the user's status line
+shown as usual. Read live; edits apply to tabs opened afterwards (buttons, status line) or
+within seconds (summary).
 
 ```json
 {
@@ -37,7 +38,7 @@ hidden. Read live; edits apply to tabs opened afterwards (buttons) or within sec
     { "icon": "Actions.Execute", "tooltip": "Run my thing", "keys": "ctrl+x ctrl+r" }
   ],
   "summary": { "source": "builtin" },
-  "hideTerminalStatusLine": true
+  "hideTerminalStatusLine": false
 }
 ```
 
@@ -60,9 +61,17 @@ hidden. Read live; edits apply to tabs opened afterwards (buttons) or within sec
     writes (line 1 the gist, line 2 what to test), e.g. the user's own status-line script.
     Use this instead of builtin when such a script exists, so it isn't generated twice.
   - `"off"`: no summary; tabs keep their first title except for /rename or a new CLI title.
-- **`hideTerminalStatusLine`** — the toolbar shows model, effort, context, cache and usage, so
-  the terminal's own status line is blanked (the user's status-line command still runs, for
-  any side effects). `false` shows it as usual.
+- **`hideTerminalStatusLine`** (default `false`) — `true` blanks the user's own status line in
+  plugin sessions only; their terminals elsewhere are untouched, and the command still runs
+  for any side effects (caches it writes, files other tools read). The toolbar already shows
+  model, effort, context, cache and usage, so a status line showing the same is redundant
+  there, and hiding it gives the prompt back a row or two.
+  **Agent: ask only if the user has a status line.** Check `statusLine` in
+  `~/.claude/settings.json`, then the project's `.claude/settings.json` and
+  `.claude/settings.local.json`. None set → don't mention it; leave the key out. One set →
+  tell the user what it shows, that the plugin's toolbar covers the same, and ask whether to
+  hide it inside the plugin. If their status line writes a session summary file, suggest
+  `"summary": {"source": "file", ...}` pointing at it at the same time.
 
 ## 4. Check it works
 
