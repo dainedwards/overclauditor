@@ -70,7 +70,13 @@ class ClaudeSessionVirtualFile(
     // baked into the title text — a text glyph has a variable advance width, so toggling
     // it resized the tab and reflowed the whole strip. Returning null means "idle": the
     // badge slot is reserved but drawn empty, so the tab width is identical in every state.
+    /** null: no error. UNSEEN: an API error the user hasn't looked at. SEEN: looked at, not yet fixed. */
+    @Volatile var errorState: ErrorState? = null
+    enum class ErrorState { UNSEEN, SEEN }
+
     fun statusGlyph(): String? = when {
+        errorState == ErrorState.UNSEEN -> "○"       // red ring: a new error (see ClaudeSessionIconProvider)
+        errorState == ErrorState.SEEN -> "●"         // red dot: seen, not yet resolved
         isExternallyOpen -> "↗"                      // ↗ external session
         isUnresponsive -> "⊘"                        // ⊘ unresponsive
         notifyState == "permission_prompt" -> "⚠"    // ⚠ needs permission

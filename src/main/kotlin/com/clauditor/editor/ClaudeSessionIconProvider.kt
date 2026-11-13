@@ -20,7 +20,7 @@ class ClaudeSessionIconProvider : FileIconProvider {
         // Status lives in a fixed-size badge appended to the tab icon (never in the title
         // text) so the tab keeps a constant width as Claude's state cycles. The badge box
         // is always present — idle paints nothing — so even the badge column never resizes.
-        val badge = badgeFor(file.statusGlyph())
+        val badge = badgeFor(file.statusGlyph(), error = file.errorState != null)
         return if (file.isWorktreeSession) RowIcon(CLAUDE_ICON, TREE_ICON, badge)
         else RowIcon(CLAUDE_ICON, badge)
     }
@@ -32,14 +32,15 @@ class ClaudeSessionIconProvider : FileIconProvider {
         // One shared icon instance per glyph (colors are read from the component at paint
         // time, so instances are safe to reuse across tabs). Empty string = idle placeholder.
         private val badgeCache = HashMap<String, StatusGlyphIcon>()
+        private val ERROR_RED = com.intellij.ui.JBColor(java.awt.Color(0xD3, 0x3F, 0x3F), java.awt.Color(0xF2, 0x55, 0x5A))
 
         @Synchronized
-        private fun badgeFor(glyph: String?): StatusGlyphIcon =
-            badgeCache.getOrPut(glyph ?: "") { StatusGlyphIcon(glyph ?: "") }
+        private fun badgeFor(glyph: String?, error: Boolean = false): StatusGlyphIcon =
+            badgeCache.getOrPut((if (error) "!" else "") + (glyph ?: "")) { StatusGlyphIcon(glyph ?: "", if (error) ERROR_RED else null) }
     }
 
     /** Paints a status glyph centered in a fixed 16px box; an empty glyph reserves the box but draws nothing. */
-    private class StatusGlyphIcon(private val glyph: String) : Icon {
+    private class StatusGlyphIcon(private val glyph: String, private val color: java.awt.Color? = null) : Icon {
         private val size = JBUIScale.scale(16)
 
         override fun getIconWidth(): Int = size
@@ -51,7 +52,7 @@ class ClaudeSessionIconProvider : FileIconProvider {
             try {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
                 g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
-                g2.color = c?.foreground ?: UIUtil.getLabelForeground()
+                g2.color = color ?: c?.foreground ?: UIUtil.getLabelForeground()
                 g2.font = (c?.font ?: UIUtil.getLabelFont()).deriveFont(size * 0.72f)
                 val fm = g2.fontMetrics
                 val tx = x + (size - fm.stringWidth(glyph)) / 2f

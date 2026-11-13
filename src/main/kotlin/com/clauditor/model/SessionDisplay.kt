@@ -14,7 +14,9 @@ data class SessionDisplay(
     /** The CLI's latest generated title. */
     val aiTitle: String? = null,
     /** The latest /rename, i.e. a custom title set after the first prompt. */
-    val renamedTitle: String? = null
+    val renamedTitle: String? = null,
+    /** The session's latest reply is an API error (see ClaudeSessionService.lastApiError). */
+    val hasError: Boolean = false
 ) {
     val displayName: String
         get() = name

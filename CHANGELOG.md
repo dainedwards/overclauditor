@@ -25,6 +25,10 @@ Clauditor 0.7.30 (https://github.com/bdkent/clauditor).
 - `hideTerminalStatusLine`: hide your own status line inside the plugin (off by default).
 - Daily upstream check for maintainers (`tools/upstream-check.sh`, `docs/upstream-updates.md`).
 
+- Red tab badge for a session whose latest reply is an API error (logged out, rate limited,
+  overloaded): a ring until you look at the tab, a dot after, gone when the session recovers.
+  Read from the transcript's own error flag; no model calls.
+
 ### Changed
 - Session list loads in the background (Clauditor built it on the UI thread: 16-26 s freezes
   on large histories), parses with a streaming reader (about 2x faster), and keeps a saved
@@ -35,6 +39,8 @@ Clauditor 0.7.30 (https://github.com/bdkent/clauditor).
 - The Commit button is gone; caches moved to the IDE system folder and are removed on uninstall.
 
 ### Fixed
+- Error text (e.g. "Invalid API key · Please run /login") could become a tab title or the summary:
+  titles now never take error-like text, and failed summarizer runs are never saved.
 - Titles showed the raw first prompt or `<local-command-caveat>`; now the CLI's own title.
 - The model dropdown showed Sonnet until the first status update.
 - "Session unresponsive" fired while a resume was loading and never cleared once raised.

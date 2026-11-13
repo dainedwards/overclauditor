@@ -77,4 +77,12 @@ class TranscriptParseTest {
         val line = """{"message":{"role":"user","content":[{"type":"image","source":{}},{"type":"text","text":"look at this"}]},"type":"user","timestamp":"2026-01-01T00:00:00Z"}"""
         assertEquals("look at this", parse(line).firstPrompt)
     }
+
+    @Test
+    fun `an API error reply flags the session until the next good reply`() {
+        val err = """{"type":"assistant","isApiErrorMessage":true,"message":{"role":"assistant","content":[{"type":"text","text":"Invalid API key"}]}}"""
+        val ok = """{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}"""
+        kotlin.test.assertTrue(parse(user("hi"), err).lastApiError)
+        kotlin.test.assertFalse(parse(user("hi"), err, user("again"), ok).lastApiError)
+    }
 }

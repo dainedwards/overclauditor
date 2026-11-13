@@ -189,7 +189,11 @@ class ClaudeSessionEditor(
 
         // Sync tab title when session names change (e.g. after /rename)
         val nameListener: () -> Unit = {
-            file.sessionId?.let { sid -> syncTitle(sessionService.getSessions().find { it.sessionId == sid }) }
+            file.sessionId?.let { sid ->
+                val s = sessionService.getSessions().find { it.sessionId == sid }
+                syncError(s?.hasError == true)
+                syncTitle(s)
+            }
         }
         sessionService.addChangeListener(nameListener)
         Disposer.register(rootDisposable, Disposable { sessionService.removeChangeListener(nameListener) })
@@ -446,6 +450,10 @@ class ClaudeSessionEditor(
         // Clear idle indicator when user switches to this tab
         val selectionListener = object : FileEditorManagerListener {
             override fun selectionChanged(event: com.intellij.openapi.fileEditor.FileEditorManagerEvent) {
+                if (event.newFile == file && file.errorState == ClaudeSessionVirtualFile.ErrorState.UNSEEN) {
+                    file.errorState = ClaudeSessionVirtualFile.ErrorState.SEEN
+                    refreshTabTitle()
+                }
                 if (event.newFile == file && file.notifyState == "idle_prompt") {
                     file.notifyState = null
                     statusService.clearNotifyState(file.sessionId ?: monitoringId)
@@ -1588,13 +1596,28 @@ class ClaudeSessionEditor(
         }
     }
 
+    /** API error in the latest reply: red badge, hollow until the tab is looked at; cleared on recovery. */
+    private fun syncError(hasError: Boolean) {
+        val next = when {
+            !hasError -> null
+            file.errorState != null -> file.errorState
+            FileEditorManager.getInstance(project).selectedFiles.contains(file) -> ClaudeSessionVirtualFile.ErrorState.SEEN
+            else -> ClaudeSessionVirtualFile.ErrorState.UNSEEN
+        }
+        if (next != file.errorState) {
+            file.errorState = next
+            refreshTabTitle()
+        }
+    }
+
     /** List changed: pin a first title, or follow a /rename or a new CLI title. */
     private fun syncTitle(s: com.clauditor.model.SessionDisplay?) {
         val sid = file.sessionId ?: return
         val store = com.clauditor.services.TitleStore
         val e = store.get(sid)
         if (e == null) {
-            val title = s?.renamedTitle ?: s?.aiTitle ?: s?.name ?: summaryGist.ifEmpty { null } ?: s?.firstPrompt ?: return
+            val title = s?.renamedTitle ?: s?.aiTitle?.takeUnless(::looksLikeError) ?: s?.name?.takeUnless(::looksLikeError)
+                ?: summaryGist.ifEmpty { null } ?: s?.firstPrompt ?: return
             val wt = knownWorktree
             if (wt == null) { applyTitle(title); return }  // pin once the worktree is known
             store.put(sid, com.clauditor.services.TitleStore.Entry(title, wt, false, s?.aiTitle, s?.renamedTitle))
@@ -1604,7 +1627,7 @@ class ClaudeSessionEditor(
         when {
             s?.renamedTitle != null && s.renamedTitle != e.renamed ->
                 store.put(sid, e.copy(title = s.renamedTitle, renamed = s.renamedTitle))
-            e.renamed == null && s?.aiTitle != null && s.aiTitle != e.aiTitle ->
+            e.renamed == null && s?.aiTitle != null && s.aiTitle != e.aiTitle && !looksLikeError(s.aiTitle) ->
                 store.put(sid, e.copy(title = s.aiTitle, aiTitle = s.aiTitle))
         }
         applyTitle(store.get(sid)!!.title)
@@ -1644,7 +1667,7 @@ class ClaudeSessionEditor(
         retitlePendingSince = 0
         val sid = file.sessionId ?: return
         val e = com.clauditor.services.TitleStore.get(sid) ?: return
-        if (summaryGist.isEmpty() || e.renamed != null) return
+        if (summaryGist.isEmpty() || e.renamed != null || looksLikeError(summaryGist)) return
         com.clauditor.services.TitleStore.put(sid, e.copy(title = summaryGist))
         applyTitle(summaryGist)
         ClaudeSessionService.getInstance(project).refresh()  // the list row shows the pinned title too
@@ -1667,9 +1690,12 @@ class ClaudeSessionEditor(
         if (mtime == 0L || mtime == summaryMtime) return
         summaryMtime = mtime
         val lines = try { f.readLines().map { it.trim() } } catch (_: Exception) { return }
+        // A failed summarizer run (logged out, rate limited) can leave its error text in the file:
+        // never show it, and never let it become a tab title.
+        if (lines.any(::isCliErrorOutput)) return
         summaryGist = lines.getOrNull(0).orEmpty()
-        if (retitlePendingSince > 0 && mtime > retitlePendingSince) pinGist()
         summaryTest = lines.getOrNull(1).orEmpty()
+        if (retitlePendingSince > 0 && mtime > retitlePendingSince) pinGist()
         summaryLabel.toolTipText = listOf(summaryGist, summaryTest).filter { it.isNotEmpty() }.joinToString(" - ")
         renderSummary()
     }
@@ -1925,6 +1951,23 @@ class ClaudeSessionEditor(
             Regex("[/\\\\]\\.claude[/\\\\]worktrees[/\\\\]([^/\\\\]+)").find(cwd)?.groupValues?.get(1) ?: ""
 
         private const val MIN_SUMMARY_FONT = 9f
+
+        private val ERROR_TEXT = Regex(
+            "(?i)\\b(error|errors|invalid api key|api key|/login|please run|log ?in|unauthori[sz]ed|forbidden|" +
+                "rate.?limit|usage limit|limit reached|overloaded|credit balance|quota|failed|failure|exception|timed? ?out|" +
+                "not logged|authenticat\\w*|permission denied)\\b"
+        )
+
+        /** Titles are conservative: anything that reads like an error never becomes one. */
+        internal fun looksLikeError(text: String): Boolean = ERROR_TEXT.containsMatchIn(text)
+
+        private val CLI_ERROR = Regex(
+            "(?i)(invalid api key|please run /login|not logged in|api error|authentication_error|" +
+                "rate limit|overloaded_error|credit balance|usage limit|\\b(401|403|429|500|529)\\b.*error)"
+        )
+
+        /** Summary text is narrower: only what a failed `claude -p` prints is hidden. */
+        internal fun isCliErrorOutput(text: String): Boolean = CLI_ERROR.containsMatchIn(text)
         /** Room the combo's value painter needs beyond the bare text (its left inset). */
         private const val COMBO_TEXT_PAD = 10
 

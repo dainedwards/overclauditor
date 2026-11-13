@@ -54,6 +54,8 @@ object SummaryService {
                     .start()
                 val out = proc.inputStream.bufferedReader().readText()
                 if (!proc.waitFor(90, TimeUnit.SECONDS)) { proc.destroyForcibly(); return@submit }
+                // A failed run (logged out, rate limited) prints its error on stdout: never save that.
+                if (proc.exitValue() != 0) return@submit
                 val lines = out.lines().map { it.trim().replace("\\", "") }.filter { it.isNotEmpty() }
                 if (lines.isEmpty()) return@submit
                 Files.writeString(summaryFile(sessionId), lines.take(2).joinToString("\n") + "\n")

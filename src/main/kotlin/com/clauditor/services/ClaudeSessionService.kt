@@ -57,6 +57,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         val renamedTitle: String? = null,
         val aiTitle: String? = null,
         val messageCount: Int = 0,
+        val lastApiError: Boolean = false,
         val gitBranch: String? = null,
         val lastTimestampMs: Long = 0
     )
@@ -84,6 +85,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         acc.renamedTitle = e.renamedTitle
         acc.aiTitle = e.aiTitle
         acc.messageCount = e.messageCount
+        acc.lastApiError = e.lastApiError
         acc.gitBranch = e.gitBranch
         acc.lastTimestamp = Instant.ofEpochMilli(e.lastTimestampMs)
         return acc
@@ -95,8 +97,9 @@ class ClaudeSessionService(private val project: Project) : Disposable {
             for ((path, acc) in accumulators) {
                 synchronized(acc) {
                     out[path.toString()] = IndexEntry(
-                        acc.tail.offset, acc.firstPrompt, acc.customTitle, acc.renamedTitle, acc.aiTitle,
-                        acc.messageCount, acc.gitBranch, acc.lastTimestamp.toEpochMilli()
+                        offset = acc.tail.offset, firstPrompt = acc.firstPrompt, customTitle = acc.customTitle,
+                        renamedTitle = acc.renamedTitle, aiTitle = acc.aiTitle, messageCount = acc.messageCount,
+                        lastApiError = acc.lastApiError, gitBranch = acc.gitBranch, lastTimestampMs = acc.lastTimestamp.toEpochMilli()
                     )
                 }
             }
@@ -121,6 +124,9 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         /** A custom title written after the first prompt: an explicit /rename. */
         var renamedTitle: String? = null
         var aiTitle: String? = null
+        /** The newest assistant line is an API error (auth, rate limit, overload). Read from the
+         *  transcript's own isApiErrorMessage flag: no model call. Cleared by the next good reply. */
+        var lastApiError = false
         var messageCount = 0
         var gitBranch: String? = null
         var lastTimestamp: Instant = Instant.EPOCH
@@ -131,6 +137,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
             customTitle = null
             renamedTitle = null
             aiTitle = null
+            lastApiError = false
             messageCount = 0
             gitBranch = null
             lastTimestamp = Instant.EPOCH
@@ -421,6 +428,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
                 name = TitleStore.get(sessionId)?.title ?: acc.renamedTitle ?: acc.aiTitle ?: acc.customTitle,
                 aiTitle = acc.aiTitle,
                 renamedTitle = acc.renamedTitle,
+                hasError = acc.lastApiError,
                 firstPrompt = firstPrompt,
                 messageCount = acc.messageCount,
                 modified = modified,
@@ -451,6 +459,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
                 var type: String? = null
                 var instant: Instant? = null
                 var isMeta = false
+                var apiError = false
                 var customTitle: String? = null
                 var aiTitle: String? = null
                 var gitBranch: String? = null
@@ -461,7 +470,8 @@ class ClaudeSessionService(private val project: Project) : Disposable {
                         "customTitle" -> customTitle = r.stringOrSkip()
                         "aiTitle" -> aiTitle = r.stringOrSkip()
                         "gitBranch" -> gitBranch = r.stringOrSkip()
-                        "isMeta" -> isMeta = if (r.peek() == com.google.gson.stream.JsonToken.BOOLEAN) r.nextBoolean() else { r.skipValue(); false }
+                        "isApiErrorMessage" -> apiError = if (r.peek() == com.google.gson.stream.JsonToken.BOOLEAN) r.nextBoolean() else { r.skipValue(); false }
+                    "isMeta" -> isMeta = if (r.peek() == com.google.gson.stream.JsonToken.BOOLEAN) r.nextBoolean() else { r.skipValue(); false }
                         "timestamp" -> instant = when (r.peek()) {
                             com.google.gson.stream.JsonToken.NUMBER -> Instant.ofEpochMilli(r.nextLong())
                             com.google.gson.stream.JsonToken.STRING -> parseInstant(r.nextString())
@@ -476,6 +486,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
                 }
 
                 if (type == "user" || type == "assistant") acc.messageCount++
+                if (type == "assistant") acc.lastApiError = apiError
 
                 // custom-title before the first prompt is the launch name (--name); after it, a /rename
                 if (type == "custom-title") {
