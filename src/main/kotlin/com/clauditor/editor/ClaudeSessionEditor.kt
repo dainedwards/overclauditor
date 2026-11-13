@@ -493,7 +493,7 @@ class ClaudeSessionEditor(
             val forkFile = ClaudeSessionVirtualFile("Fork of ${file.baseName}", forkFrom = sessionId).apply {
                 workingDir = file.workingDir
             }
-            FileEditorManager.getInstance(project).openFile(forkFile, true)
+            openSessionTabAtEnd(project, forkFile, true)
         }
 
         reconnectButton = javax.swing.JButton(com.intellij.icons.AllIcons.Actions.Refresh).apply {

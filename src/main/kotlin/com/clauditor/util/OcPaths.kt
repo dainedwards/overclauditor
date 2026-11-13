@@ -73,6 +73,7 @@ object OcPaths {
         override fun beforePluginUnload(pluginDescriptor: IdeaPluginDescriptor, isUpdate: Boolean) {
             if (isUpdate || pluginDescriptor.pluginId.idString != PLUGIN_ID) return
             runCatching { File(PathManager.getSystemPath(), "overclauditor").deleteRecursively() }
+            com.clauditor.editor.releaseDoubleClick()
             sweepStaleTempFiles(maxAgeMs = 0)
         }
     }

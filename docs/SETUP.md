@@ -101,6 +101,10 @@ passes its status-line capture and hooks to the sessions it starts with `claude 
 | IDE system folder `/overclauditor/` | session-list index, pinned titles, built-in summaries, the bundled commands | deleted |
 | temp folder `clauditor-*` | per-session status capture | deleted when sessions close; leftovers swept at startup and on uninstall |
 
+Double-clicking the empty editor tab bar starts a new session; the IDE's own double-click there
+(hide/restore all tool windows, registry `editor.maximize.on.double.click`) is switched off while
+the plugin is installed and switched back on when it is removed.
+
 Built-in summaries run `claude -p --no-session-persistence` with auto-memory off, so they add
 nothing under `~/.claude/projects`. Developer-only (`tools/publish-local.sh`):
 `~/.overclauditor/repo/`, the local plugin repository.

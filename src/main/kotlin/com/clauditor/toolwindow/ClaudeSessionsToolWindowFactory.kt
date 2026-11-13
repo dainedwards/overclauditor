@@ -121,7 +121,7 @@ class ClaudeSessionsToolWindowFactory : ToolWindowFactory, DumbAware {
                 )
             }
         }
-        FileEditorManager.getInstance(project).openFile(file, true)
+        com.clauditor.editor.openSessionTabAtEnd(project, file, true)
     }
 
     private fun forkSession(project: Project, session: SessionDisplay) {
@@ -131,7 +131,7 @@ class ClaudeSessionsToolWindowFactory : ToolWindowFactory, DumbAware {
                 isWorktreeSession = true
             }
         }
-        FileEditorManager.getInstance(project).openFile(file, true)
+        com.clauditor.editor.openSessionTabAtEnd(project, file, true)
     }
 
     override fun shouldBeAvailable(project: Project): Boolean = project.basePath != null

@@ -20,6 +20,22 @@ import javax.swing.JMenuItem
 import javax.swing.JPopupMenu
 import javax.swing.SwingUtilities
 
+/**
+ * Open a session tab at the END of the tab row. The platform puts new tabs next to the current
+ * one unless "Open new tabs at the end" is on; the public way to ask for the end is to switch
+ * that setting on for this one open and restore it, leaving the user's other files alone.
+ */
+fun openSessionTabAtEnd(project: Project, file: VirtualFile, focus: Boolean) {
+    val ui = com.intellij.ide.ui.UISettings.getInstance()
+    val was = ui.openTabsAtTheEnd
+    ui.openTabsAtTheEnd = true
+    try {
+        FileEditorManager.getInstance(project).openFile(file, focus)
+    } finally {
+        ui.openTabsAtTheEnd = was
+    }
+}
+
 /** Open (or focus) a tab for an existing session. */
 fun openClaudeSession(project: Project, session: com.clauditor.model.SessionDisplay, focus: Boolean) {
     val manager = FileEditorManager.getInstance(project)
@@ -34,7 +50,7 @@ fun openClaudeSession(project: Project, session: com.clauditor.model.SessionDisp
             isWorktreeSession = true
         }
     }
-    manager.openFile(file, focus)
+    openSessionTabAtEnd(project, file, focus)
 }
 
 /**
@@ -64,7 +80,7 @@ fun restoreOpenSessions(project: Project) {
 
 /** Open a fresh Claude session tab; the CLI titles it after the first message. */
 fun openNewClaudeSession(project: Project) {
-    FileEditorManager.getInstance(project).openFile(ClaudeSessionVirtualFile("New session"), true)
+    openSessionTabAtEnd(project, ClaudeSessionVirtualFile("New session"), true)
 }
 
 /** "New Claude Session" in the right-click menu of an editor tab. */
@@ -86,6 +102,7 @@ class TabBarNewSessionActivity : ProjectActivity {
         com.clauditor.util.ClauditorExecutor.submit { com.clauditor.util.OcPaths.sweepStaleTempFiles() }
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
+            claimDoubleClick()
             restoreOpenSessions(project)
             installAll(project)
             project.messageBus.connect().subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER,
@@ -131,3 +148,30 @@ class TabBarNewSessionActivity : ProjectActivity {
         const val INSTALLED = "overclauditor.tabBarNewSession"
     }
 }
+
+/** The platform's own double-click on the empty tab bar: hide/restore all tool windows. */
+private const val MAXIMIZE_KEY = "editor.maximize.on.double.click"
+private const val RESTORE_PROP = "overclauditor.restoreMaximizeOnDoubleClick"
+
+/**
+ * Double-clicking the empty tab bar is ours (new session). The platform runs its own handler
+ * first and ignores consumed events, so both fired and every new session also toggled all
+ * tool windows. Switch the platform's off, remembering the user's value for uninstall.
+ */
+private fun claimDoubleClick() = try {
+    val key = com.intellij.openapi.util.registry.Registry.get(MAXIMIZE_KEY)
+    if (key.asBoolean()) {
+        com.intellij.ide.util.PropertiesComponent.getInstance().setValue(RESTORE_PROP, true)
+        key.setValue(false)
+    }
+} catch (_: Throwable) {}
+
+/** Uninstall: give the platform its double-click back if we took it. */
+fun releaseDoubleClick() = try {
+    val props = com.intellij.ide.util.PropertiesComponent.getInstance()
+    if (props.getBoolean(RESTORE_PROP)) {
+        com.intellij.openapi.util.registry.Registry.get(MAXIMIZE_KEY).setValue(true)
+        props.unsetValue(RESTORE_PROP)
+    }
+} catch (_: Throwable) {}
+
