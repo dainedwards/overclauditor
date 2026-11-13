@@ -1578,8 +1578,7 @@ class ClaudeSessionEditor(
     /** Worktree from the first status report; titles aren't pinned before it is known. */
     private var knownWorktree: String? = null
 
-    private fun worktreeOf(cwd: String): String =
-        Regex("/\\.claude/worktrees/([^/]+)").find(cwd)?.groupValues?.get(1) ?: ""
+
 
     private fun applyTitle(title: String) {
         val short = com.clauditor.model.shortTitle(title)
@@ -1920,6 +1919,10 @@ class ClaudeSessionEditor(
             val f = frac.coerceIn(0.0, 1.0).toFloat()
             return Color.getHSBColor((1f - f) * 120f / 360f, 0.70f, 0.85f)
         }
+
+        /** The worktree a cwd is in ("" for the main checkout), either slash style. */
+        internal fun worktreeOf(cwd: String): String =
+            Regex("[/\\\\]\\.claude[/\\\\]worktrees[/\\\\]([^/\\\\]+)").find(cwd)?.groupValues?.get(1) ?: ""
 
         private const val MIN_SUMMARY_FONT = 9f
         /** Room the combo's value painter needs beyond the bare text (its left inset). */

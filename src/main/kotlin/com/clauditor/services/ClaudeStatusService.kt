@@ -119,13 +119,23 @@ class ClaudeStatusService(private val project: Project) : Disposable {
      * Creates a temporary settings file that overrides statusLine.command
      * and adds Notification hooks for idle/permission detection.
      */
+    /**
+     * A script path as Claude Code's shell will read it. On Windows it runs commands through Git
+     * Bash, where backslashes are escapes: C:\\Users\\x.sh arrives as C:Usersx.sh. Forward slashes
+     * work there, and invoking bash explicitly doesn't depend on the .sh file association.
+     */
+    private fun shellPath(p: Path): String {
+        val s = p.toAbsolutePath().toString()
+        return if (com.clauditor.util.ProcessHelper.IS_WINDOWS) "bash \"" + s.replace('\\', '/') + "\"" else s
+    }
+
     fun createOverrideSettingsFile(wrapperPath: Path, notifyPath: Path): Path {
         val file = Files.createTempFile("clauditor-settings-", ".json")
         val root = JsonObject()
 
         val statusLine = JsonObject().apply {
             addProperty("type", "command")
-            addProperty("command", wrapperPath.toAbsolutePath().toString())
+            addProperty("command", shellPath(wrapperPath))
             val refreshInterval = com.clauditor.settings.ClauditorSettings.getInstance().state.statusLineRefreshInterval
             if (refreshInterval > 0) {
                 addProperty("refreshInterval", refreshInterval)
@@ -133,7 +143,7 @@ class ClaudeStatusService(private val project: Project) : Disposable {
         }
         root.add("statusLine", statusLine)
 
-        val notifyCmd = notifyPath.toAbsolutePath().toString()
+        val notifyCmd = shellPath(notifyPath)
         val hookEntry = JsonArray().apply {
             add(JsonObject().apply {
                 addProperty("type", "command")

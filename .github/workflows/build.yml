@@ -28,3 +28,24 @@ jobs:
         with:
           name: plugin-zip
           path: build/distributions/*.zip
+
+  # The tests on the other OSes users run: path separators, the bash status-line wrapper, file
+  # handling. Catches Mac-isms that the Linux build above can't.
+  test-os:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - run: ./gradlew test
+        shell: bash

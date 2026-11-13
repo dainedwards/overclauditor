@@ -12,6 +12,8 @@ import java.io.File
  */
 object ProcessHelper {
 
+    val IS_WINDOWS: Boolean = System.getProperty("os.name").orEmpty().startsWith("Windows")
+
     private val log = Logger.getInstance(ProcessHelper::class.java)
     private val resolvedPaths = java.util.concurrent.ConcurrentHashMap<String, String>()
 
@@ -23,8 +25,10 @@ object ProcessHelper {
 
     fun augmentedEnv(): MutableMap<String, String> {
         val env = System.getenv().toMutableMap()
-        val currentPath = env["PATH"] ?: "/usr/bin:/bin"
-        env["PATH"] = (EXTRA_PATHS + currentPath.split(":")).distinct().joinToString(":")
+        // File.pathSeparator: ':' on macOS/Linux, ';' on Windows (where ':' is in every drive path).
+        val currentPath = env["PATH"] ?: env["Path"] ?: "/usr/bin:/bin"
+        val dirs = (if (IS_WINDOWS) emptyList() else EXTRA_PATHS) + currentPath.split(File.pathSeparator)
+        env["PATH"] = dirs.distinct().joinToString(File.pathSeparator)
         return env
     }
 
@@ -48,7 +52,7 @@ object ProcessHelper {
     ): ExecResult {
         val pb = builder(*command).redirectErrorStream(true)
         // Don't share parent's stdin — child processes that try to read would block forever.
-        pb.redirectInput(ProcessBuilder.Redirect.from(java.io.File("/dev/null")))
+        pb.redirectInput(ProcessBuilder.Redirect.from(java.io.File(if (IS_WINDOWS) "NUL" else "/dev/null")))
         if (workDir != null) pb.directory(java.io.File(workDir))
         if (extraEnv.isNotEmpty()) pb.environment().putAll(extraEnv)
 
@@ -103,10 +107,14 @@ object ProcessHelper {
     fun which(binary: String): String? {
         resolvedPaths[binary]?.let { return it }
         val env = augmentedEnv()
-        val pathDirs = (env["PATH"] ?: "").split(":")
-        for (dir in pathDirs) {
-            val candidate = File(dir, binary)
-            if (candidate.exists() && candidate.canExecute()) {
+        val pathDirs = (env["PATH"] ?: "").split(File.pathSeparator)
+        // Windows programs carry an extension (claude.exe, git.exe, claude.cmd from npm).
+        val names = if (IS_WINDOWS && !binary.contains('.'))
+            (System.getenv("PATHEXT") ?: ".EXE;.CMD;.BAT").split(';').filter { it.isNotBlank() }.map { binary + it.lowercase() }
+        else listOf(binary)
+        for (dir in pathDirs) for (name in names) {
+            val candidate = File(dir, name)
+            if (candidate.isFile && candidate.canExecute()) {
                 log.info("Clauditor: resolved '$binary' to ${candidate.absolutePath}")
                 resolvedPaths[binary] = candidate.absolutePath
                 return candidate.absolutePath

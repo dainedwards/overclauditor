@@ -9,6 +9,9 @@ that show everything about a session at a glance. A fork of
 
 ![Overclauditor features](docs/overclauditor-features.svg)
 
+**Platforms:** used daily on macOS; Linux and Windows run the test suite in CI on every push
+but haven't been used day to day (Windows needs Git for Windows, as Claude Code does).
+
 **Install and configure: [docs/SETUP.md](docs/SETUP.md).** What changed from Clauditor:
 [CHANGELOG.md](CHANGELOG.md).
 

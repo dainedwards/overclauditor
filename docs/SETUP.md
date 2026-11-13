@@ -9,6 +9,10 @@ Everything machine-specific lives in one optional file, `~/.overclauditor/config
 - A JetBrains IDE, build 243 (2024.3) or newer, with the bundled Terminal plugin.
 - Claude Code CLI (`claude`) on PATH, signed in. If it isn't on the IDE's PATH, set its full
   path in Settings > Tools > Overclauditor > claude binary.
+- **OS:** used daily on macOS; Linux and Windows pass the test suite in CI but are less used.
+  On Windows, Git for Windows must be installed (Claude Code needs it too): the plugin's
+  status-line capture is a small bash script run through it. Spotting sessions open in other
+  terminals uses `ps` and does nothing on Windows.
 - JDK 21 to build. macOS: `/usr/libexec/java_home -v 21` must print a path, or set `JAVA_HOME`.
 
 ## 2. Build and install
