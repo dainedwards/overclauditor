@@ -77,7 +77,9 @@ class ClaudeStatusService(private val project: Project) : Disposable {
             // itself runs it — honoring tilde, \$VARs, quotes, and pipes. A bare
             // `\$CLAUDITOR_ORIGINAL_STATUSLINE` only word-splits/globs, which breaks
             // any command using ~, \$HOME, quoted paths, or pipes.
-            appendLine("  echo \"\$input\" | eval \"\$CLAUDITOR_ORIGINAL_STATUSLINE\"")
+            // Still run the user's command for its side effects (caches, breadcrumbs), but
+            // print nothing: the editor's toolbar replaces the terminal's status line.
+            appendLine("  echo \"\$input\" | eval \"\$CLAUDITOR_ORIGINAL_STATUSLINE\" >/dev/null 2>&1")
             appendLine("fi")
         })
         script.toFile().setExecutable(true)

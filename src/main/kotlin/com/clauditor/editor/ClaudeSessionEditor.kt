@@ -105,10 +105,12 @@ class ClaudeSessionEditor(
         layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.X_AXIS)
         isOpaque = false
     }
-    private val effortLabel = JBLabel("").apply {
-        border = JBUI.Borders.empty(0, 6)
-        foreground = UIManager.getColor("Label.disabledForeground")
+    /** Session gist + what to test, from the status-line script's Haiku summary cache. */
+    private val summaryLabel = JBLabel("").apply {
+        border = JBUI.Borders.empty(0, 8)
+        horizontalAlignment = javax.swing.SwingConstants.CENTER
     }
+    private var summaryMtime = 0L
     private val thinkingLabel = JBLabel("").apply {
         border = JBUI.Borders.empty(0, 6)
         foreground = UIManager.getColor("Label.disabledForeground")
@@ -138,12 +140,10 @@ class ClaudeSessionEditor(
         val rightPanel = JPanel().apply {
             layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.X_AXIS)
             isOpaque = false
-            effortLabel.alignmentY = 0.5f
             thinkingLabel.alignmentY = 0.5f
             remainingLabel.alignmentY = 0.5f
             costLabel.alignmentY = 0.5f
             versionLabel.alignmentY = 0.5f
-            add(effortLabel)
             add(thinkingLabel)
             add(remainingLabel)
             add(costLabel)
@@ -524,6 +524,7 @@ class ClaudeSessionEditor(
 
         val toolbar = JPanel(BorderLayout())
         toolbar.add(leftPanel, BorderLayout.WEST)
+        toolbar.add(summaryLabel, BorderLayout.CENTER)
         toolbar.add(rightPanel, BorderLayout.EAST)
         return toolbar
     }
@@ -1501,7 +1502,12 @@ class ClaudeSessionEditor(
 
     /** Tick the cache bar each second while the tab is on screen; subscribe to plan usage. */
     private fun startCacheTimer() {
-        val timer = javax.swing.Timer(1000) { if (tabShowing) paintCacheBar() }
+        var ticks = 0
+        val timer = javax.swing.Timer(1000) {
+            if (!tabShowing) return@Timer
+            paintCacheBar()
+            if (ticks++ % 3 == 0) refreshSummary()
+        }
         timer.initialDelay = 0
         timer.start()
         Disposer.register(sessionDisposable, Disposable { timer.stop() })
@@ -1548,6 +1554,25 @@ class ClaudeSessionEditor(
         }
     }
 
+    /** ~/.claude/statusline-cache/<session>.summary: line 1 the gist, line 2 what to test. Re-read on mtime change. */
+    private fun refreshSummary() {
+        val sid = file.sessionId ?: return
+        val f = java.io.File(System.getProperty("user.home"), ".claude/statusline-cache/$sid.summary")
+        val mtime = f.lastModified()
+        if (mtime == 0L || mtime == summaryMtime) return
+        summaryMtime = mtime
+        val lines = try { f.readLines().map { it.trim() } } catch (_: Exception) { return }
+        val gist = lines.getOrNull(0).orEmpty()
+        val test = lines.getOrNull(1).orEmpty()
+        fun esc(t: String) = com.intellij.openapi.util.text.StringUtil.escapeXmlEntities(t)
+        summaryLabel.text = "<html><div style='text-align:center'>" +
+            (if (gist.isNotEmpty()) "<span style='color:#2AA198'>${esc(gist)}</span>" else "") +
+            (if (gist.isNotEmpty() && test.isNotEmpty()) "<br>" else "") +
+            (if (test.isNotEmpty()) "<span style='color:#5FD7FF'><b>${esc(test)}</b></span>" else "") +
+            "</div></html>"
+        summaryLabel.toolTipText = listOf(gist, test).filter { it.isNotEmpty() }.joinToString("\n")
+    }
+
     private fun paintCacheBar() {
         val exp = cacheExpiresAt
         if (exp == null) {
@@ -1583,7 +1608,6 @@ class ClaudeSessionEditor(
                 usedPercent < 80 -> COLOR_YELLOW
                 else -> COLOR_RED
             }
-            effortLabel.text = status.effortLevel?.let { "effort: $it" } ?: ""
             thinkingLabel.text = if (status.thinkingEnabled == true) "thinking" else ""
             remainingLabel.text = when {
                 status.contextRemainingTokens != null && status.contextWindowSize != null ->
@@ -1657,7 +1681,6 @@ class ClaudeSessionEditor(
         contextBar.isVisible = false
         contextProgress.value = 0
         contextProgress.string = "Context: —"
-        effortLabel.text = ""
         thinkingLabel.text = ""
         remainingLabel.text = ""
         costLabel.text = ""
