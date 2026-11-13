@@ -591,8 +591,7 @@ class ClaudeSessionEditor(
 
                     // One parse per tick, shared by both consumers — this used to walk the
                     // whole transcript twice.
-                    val ops = getSessionFileOperations()
-                    val sessionFiles = ops.mapTo(HashSet()) { it.filePath }
+                    val sessionFiles = getSessionFilePaths()
                     val bySession = if (sessionFiles.isNotEmpty()) {
                         changedFiles.count { it in sessionFiles }
                     } else 0
@@ -1139,138 +1138,47 @@ class ClaudeSessionEditor(
         return if (hint != null) "$hint<br/><br/>$escaped" else escaped
     }
 
-    private data class SessionFileOp(
-        val filePath: String,
-        val type: String,           // "Write" or "Edit"
-        val content: String? = null, // Write: full file content
-        val oldString: String? = null, // Edit
-        val newString: String? = null  // Edit
-    )
-
-    /** Parse the JSONL for Write/Edit tool uses with full operation details. */
-    // Incremental parse state for this session's Write/Edit operations. Only the ops are
-    // retained, which measured ~2% of transcript bytes (0.86 MB for a 44 MB session) — cheap
-    // enough to keep, and it saves re-reading the whole transcript on every toolbar tick.
+    // Paths this session has written or edited, from its transcript, read incrementally.
+    // Only paths are kept: the toolbar needs "which changed files did this session touch".
     private val opsTail = com.clauditor.util.JsonlTailReader()
-    private val cachedOps = mutableListOf<SessionFileOp>()
+    private val sessionFilePaths = java.util.LinkedHashSet<String>()
     private var cachedOpsPath: java.nio.file.Path? = null
 
-    /**
-     * The session's file-writing operations, oldest first.
-     *
-     * Parses only what the transcript has gained since the last call; the op list is
-     * append-only, so accumulating it is equivalent to re-reading from the top.
-     */
     @Synchronized
-    private fun getSessionFileOperations(): List<SessionFileOp> {
-        val jsonlPath = transcriptPath() ?: return emptyList()
-        if (!java.nio.file.Files.exists(jsonlPath)) return emptyList()
-
-        // Session linked or rebound to a different transcript: start over.
+    private fun getSessionFilePaths(): Set<String> {
+        val jsonlPath = transcriptPath() ?: return emptySet()
+        if (!java.nio.file.Files.exists(jsonlPath)) return emptySet()
         if (jsonlPath != cachedOpsPath) {
             cachedOpsPath = jsonlPath
             opsTail.reset()
-            cachedOps.clear()
+            sessionFilePaths.clear()
         }
-
         try {
-            opsTail.consume(jsonlPath, onRestart = { cachedOps.clear() }) { line ->
-                appendFileOps(line, cachedOps)
+            opsTail.consume(jsonlPath, onRestart = { sessionFilePaths.clear() }) { line ->
+                // Cheap substring gate first: most lines (API blobs, tool output) carry no
+                // Write/Edit call and are never JSON-parsed.
+                if (line.contains("\"name\":\"Edit\"") || line.contains("\"name\":\"Write\"")) {
+                    appendFilePaths(line, sessionFilePaths)
+                }
             }
         } catch (_: Exception) {}
-        return java.util.ArrayList(cachedOps)
+        return java.util.HashSet(sessionFilePaths)
     }
 
-    /** Extract any Write/Edit tool uses on one transcript line into [into]. */
-    private fun appendFileOps(line: String, into: MutableList<SessionFileOp>) {
+    private fun appendFilePaths(line: String, into: MutableSet<String>) {
         try {
-            val obj = com.google.gson.Gson().fromJson(line, com.google.gson.JsonObject::class.java)
+            val obj = com.google.gson.JsonParser.parseString(line).asJsonObject
             if (obj.get("type")?.asString != "assistant") return
             val content = obj.getAsJsonObject("message")?.getAsJsonArray("content") ?: return
             for (block in content) {
                 if (!block.isJsonObject) continue
                 val b = block.asJsonObject
                 if (b.get("type")?.asString != "tool_use") continue
-                val name = b.get("name")?.asString ?: continue
-                val input = b.getAsJsonObject("input") ?: continue
-                val filePath = input.get("file_path")?.asString ?: continue
-                when (name) {
-                    "Write" -> into.add(SessionFileOp(filePath, "Write",
-                        content = input.get("content")?.asString))
-                    "Edit" -> into.add(SessionFileOp(filePath, "Edit",
-                        oldString = input.get("old_string")?.asString,
-                        newString = input.get("new_string")?.asString))
-                }
+                val name = b.get("name")?.asString
+                if (name != "Write" && name != "Edit") continue
+                b.getAsJsonObject("input")?.get("file_path")?.asString?.let { into.add(it) }
             }
         } catch (_: Exception) {}
-    }
-
-    /**
-     * Check if the session's changed files are "pure" — i.e. the only changes in each
-     * file are from this session's Write/Edit operations.
-     *
-     * Approach: for each session-touched file that has uncommitted changes, replay the
-     * session's operations against the HEAD version. If the result matches the current
-     * file content, no external changes are mixed in.
-     *
-     * Returns the list of pure session files ready to commit, or empty if impure/nothing to commit.
-     */
-    private fun getPureSessionFiles(gitDir: String, ops: List<SessionFileOp>): List<String> {
-        if (ops.isEmpty()) return emptyList()
-
-        val status = execGit(gitDir, "status", "--porcelain").trim()
-        if (status.isEmpty()) return emptyList()
-
-        val changedFiles = status.lines().filter { it.isNotBlank() }.mapNotNull { line ->
-            val path = line.drop(3).split(" -> ").last().trim()
-            if (path.isNotEmpty()) java.nio.file.Path.of(gitDir, path).toAbsolutePath().toString() else null
-        }.toSet()
-
-        val sessionFiles = ops.map { it.filePath }.toSet()
-        val sessionChangedFiles = changedFiles.filter { it in sessionFiles }
-        if (sessionChangedFiles.isEmpty()) return emptyList()
-
-        val pureFiles = mutableListOf<String>()
-        for (filePath in sessionChangedFiles) {
-            val fileOps = ops.filter { it.filePath == filePath }
-            if (isFilePure(gitDir, filePath, fileOps)) {
-                pureFiles.add(filePath)
-            } else {
-                return emptyList() // any impure file means we can't safely commit
-            }
-        }
-        return pureFiles
-    }
-
-    private fun isFilePure(gitDir: String, filePath: String, ops: List<SessionFileOp>): Boolean {
-        val relativePath = java.nio.file.Path.of(gitDir).relativize(java.nio.file.Path.of(filePath)).toString()
-
-        // Get HEAD version (empty if file is new)
-        val headContent = try {
-            val result = execGitWithExitCode(gitDir, "show", "HEAD:$relativePath")
-            if (result.exitCode == 0) result.output else ""
-        } catch (_: Exception) { "" }
-
-        // Replay session operations in order
-        var simulated = headContent
-        for (op in ops) {
-            when (op.type) {
-                "Write" -> simulated = op.content ?: return false
-                "Edit" -> {
-                    val old = op.oldString ?: return false
-                    val new = op.newString ?: return false
-                    if (!simulated.contains(old)) return false
-                    simulated = simulated.replaceFirst(old, new)
-                }
-            }
-        }
-
-        // Compare simulation with current file
-        val currentContent = try {
-            java.nio.file.Files.readString(java.nio.file.Path.of(filePath))
-        } catch (_: Exception) { return false }
-
-        return simulated == currentContent
     }
 
     /** Paint each combo entry (and the closed combo) in its own colour. */

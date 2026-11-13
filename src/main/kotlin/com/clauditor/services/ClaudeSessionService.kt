@@ -46,6 +46,71 @@ class ClaudeSessionService(private val project: Project) : Disposable {
      */
     private val accumulators = java.util.concurrent.ConcurrentHashMap<Path, SessionAccumulator>()
 
+    /**
+     * Accumulator state saved to disk so a restart resumes each transcript from its saved
+     * offset instead of reading every byte again (transcripts reach hundreds of MB each).
+     */
+    private data class IndexEntry(
+        val offset: Long = 0,
+        val firstPrompt: String? = null,
+        val customTitle: String? = null,
+        val aiTitle: String? = null,
+        val messageCount: Int = 0,
+        val gitBranch: String? = null,
+        val lastTimestampMs: Long = 0
+    )
+
+    private val indexFile: Path by lazy {
+        val key = Integer.toHexString((project.basePath ?: project.name).hashCode())
+        Path.of(System.getProperty("user.home"), ".overclauditor", "session-index", "$key.json")
+    }
+
+    private val savedIndex: Map<String, IndexEntry> by lazy {
+        try {
+            val type = object : com.google.gson.reflect.TypeToken<Map<String, IndexEntry>>() {}.type
+            Files.newBufferedReader(indexFile).use { gson.fromJson<Map<String, IndexEntry>>(it, type) } ?: emptyMap()
+        } catch (_: Exception) { emptyMap() }
+    }
+
+    private fun newAccumulator(path: Path): SessionAccumulator {
+        val acc = SessionAccumulator()
+        val e = savedIndex[path.toString()] ?: return acc
+        val size = try { Files.size(path) } catch (_: Exception) { return acc }
+        if (size < e.offset) return acc  // rewritten since: read it fresh
+        acc.tail.restore(e.offset)
+        acc.firstPrompt = e.firstPrompt
+        acc.customTitle = e.customTitle
+        acc.aiTitle = e.aiTitle
+        acc.messageCount = e.messageCount
+        acc.gitBranch = e.gitBranch
+        acc.lastTimestamp = Instant.ofEpochMilli(e.lastTimestampMs)
+        return acc
+    }
+
+    private fun saveIndex() {
+        try {
+            val out = HashMap<String, IndexEntry>()
+            for ((path, acc) in accumulators) {
+                synchronized(acc) {
+                    out[path.toString()] = IndexEntry(
+                        acc.tail.offset, acc.firstPrompt, acc.customTitle, acc.aiTitle,
+                        acc.messageCount, acc.gitBranch, acc.lastTimestamp.toEpochMilli()
+                    )
+                }
+            }
+            Files.createDirectories(indexFile.parent)
+            val tmp = indexFile.resolveSibling(indexFile.fileName.toString() + ".tmp")
+            Files.newBufferedWriter(tmp).use { gson.toJson(out, it) }
+            Files.move(tmp, indexFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        } catch (e: Exception) {
+            log.warn("Overclauditor: could not save session index", e)
+        }
+    }
+
+    /** Set when a pass read new transcript bytes, so the index is only rewritten when it changed. */
+    @Volatile private var indexDirty = false
+
     private class SessionAccumulator {
         val tail = com.clauditor.util.JsonlTailReader()
         var firstPrompt: String? = null
@@ -91,14 +156,18 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         listeners.remove(listener)
     }
 
+    /**
+     * The last session list built. Never scans on the caller's thread: before the first scan
+     * finishes this returns an empty list and starts one; change listeners fire when it lands.
+     */
     fun getSessions(): List<SessionDisplay> {
-        var result = cachedSessions
-        if (result == null) {
-            result = loadSessions()
-            cachedSessions = result
-        }
-        return result
+        cachedSessions?.let { return it }
+        refresh()
+        return emptyList()
     }
+
+    /** False until the first scan has finished, so a panel can say it's loading. */
+    val isLoaded: Boolean get() = cachedSessions != null
 
     fun deleteSession(sessionId: String): Boolean {
         val basePath = project.basePath ?: return false
@@ -286,6 +355,10 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         // Drop parse state for transcripts that are gone (deleted sessions, removed worktrees)
         // so their accumulators don't outlive them.
         accumulators.keys.retainAll(seen)
+        if (indexDirty) {
+            indexDirty = false
+            saveIndex()
+        }
         return (mainSessions + wtSessions).sortedByDescending { it.modified }
     }
 
@@ -318,11 +391,12 @@ class ClaudeSessionService(private val project: Project) : Disposable {
 
     private fun parseJsonlSession(path: Path, worktreeName: String?): SessionDisplay? {
         val sessionId = path.fileName.toString().removeSuffix(".jsonl")
-        val acc = accumulators.computeIfAbsent(path) { SessionAccumulator() }
+        val acc = accumulators.computeIfAbsent(path) { newAccumulator(it) }
 
         synchronized(acc) {
             try {
-                acc.tail.consume(path, onRestart = { acc.reset() }) { line -> applyLine(acc, line) }
+                val n = acc.tail.consume(path, onRestart = { acc.reset() }) { line -> applyLine(acc, line) }
+                if (n > 0) indexDirty = true
             } catch (e: Exception) {
                 log.warn("Failed to read session file: $path", e)
             }
@@ -349,29 +423,55 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         }
     }
 
-    /** Fold one transcript line into [acc]. Every update is order-independent or last-wins. */
+    /**
+     * Fold one transcript line into [acc]. Every update is order-independent or last-wins.
+     *
+     * Streams the line's top-level keys and skips every value it doesn't need, so the large
+     * ones (API request blobs, tool output, up to ~1 MB a line) are never built into a tree.
+     * The message body is only materialised while the first prompt is still unknown.
+     */
     private fun applyLine(acc: SessionAccumulator, line: String) {
         try {
-            val obj = gson.fromJson(line, JsonObject::class.java)
-            val type = obj.get("type")?.asString
-
-            if (type == "user" || type == "assistant") {
-                acc.messageCount++
+            val r = com.google.gson.stream.JsonReader(java.io.StringReader(line))
+            if (r.peek() != com.google.gson.stream.JsonToken.BEGIN_OBJECT) return
+            r.beginObject()
+            var type: String? = null
+            var instant: Instant? = null
+            var isMeta = false
+            var customTitle: String? = null
+            var aiTitle: String? = null
+            var gitBranch: String? = null
+            var message: JsonObject? = null
+            while (r.hasNext()) {
+                when (r.nextName()) {
+                    "type" -> type = r.stringOrSkip()
+                    "customTitle" -> customTitle = r.stringOrSkip()
+                    "aiTitle" -> aiTitle = r.stringOrSkip()
+                    "gitBranch" -> gitBranch = r.stringOrSkip()
+                    "isMeta" -> isMeta = if (r.peek() == com.google.gson.stream.JsonToken.BOOLEAN) r.nextBoolean() else { r.skipValue(); false }
+                    "timestamp" -> instant = when (r.peek()) {
+                        com.google.gson.stream.JsonToken.NUMBER -> Instant.ofEpochMilli(r.nextLong())
+                        com.google.gson.stream.JsonToken.STRING -> parseInstant(r.nextString())
+                        else -> { r.skipValue(); null }
+                    }
+                    "message" ->
+                        if (acc.firstPrompt == null && r.peek() == com.google.gson.stream.JsonToken.BEGIN_OBJECT)
+                            message = com.google.gson.JsonParser.parseReader(r).asJsonObject
+                        else r.skipValue()
+                    else -> r.skipValue()
+                }
             }
+
+            if (type == "user" || type == "assistant") acc.messageCount++
 
             // /rename writes a custom-title entry; keep the last one
-            if (type == "custom-title") {
-                acc.customTitle = obj.get("customTitle")?.asString
-            }
+            if (type == "custom-title") acc.customTitle = customTitle
 
             // The CLI's own generated title; keep the last one
-            if (type == "ai-title") {
-                obj.get("aiTitle")?.asString?.takeIf { it.isNotBlank() }?.let { acc.aiTitle = it }
-            }
+            if (type == "ai-title") aiTitle?.takeIf { it.isNotBlank() }?.let { acc.aiTitle = it }
 
-            // Extract first real user prompt (skip meta lines and <local-command-caveat>-style wrappers)
-            if (type == "user" && acc.firstPrompt == null && obj.get("isMeta")?.asBoolean != true) {
-                val message = obj.getAsJsonObject("message")
+            // First real user prompt (skip meta lines and <local-command-caveat>-style wrappers)
+            if (type == "user" && acc.firstPrompt == null && !isMeta) {
                 val content = message?.get("content")
                 acc.firstPrompt = when {
                     content == null -> null
@@ -383,29 +483,17 @@ class ClaudeSessionService(private val project: Project) : Disposable {
                     }
                     else -> null
                 }?.trim()?.takeUnless { it.isEmpty() || SYSTEM_WRAPPER.containsMatchIn(it) }
-
-                // Grab git branch from first user message
-                acc.gitBranch = obj.get("gitBranch")?.asString
+                acc.gitBranch = gitBranch
             }
 
-            // Track latest timestamp
-            val ts = obj.get("timestamp")
-            if (ts != null) {
-                val instant = when {
-                    ts.isJsonPrimitive && ts.asJsonPrimitive.isNumber ->
-                        Instant.ofEpochMilli(ts.asLong)
-                    ts.isJsonPrimitive && ts.asJsonPrimitive.isString ->
-                        parseInstant(ts.asString)
-                    else -> null
-                }
-                if (instant != null && instant > acc.lastTimestamp) {
-                    acc.lastTimestamp = instant
-                }
-            }
+            if (instant != null && instant > acc.lastTimestamp) acc.lastTimestamp = instant
         } catch (_: Exception) {
             // Skip malformed lines
         }
     }
+
+    private fun com.google.gson.stream.JsonReader.stringOrSkip(): String? =
+        if (peek() == com.google.gson.stream.JsonToken.STRING) nextString() else { skipValue(); null }
 
     private fun parseInstant(dateStr: String): Instant {
         return try {

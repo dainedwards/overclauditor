@@ -35,6 +35,11 @@ class JsonlTailReader {
         offset = 0
     }
 
+    /** Resume from a byte offset saved earlier (it must sit just after a newline). */
+    fun restore(savedOffset: Long) {
+        offset = savedOffset
+    }
+
     /**
      * Deliver every complete, non-blank line appended since the last call, and return how
      * many there were. [onRestart] fires first if the file was rewritten.

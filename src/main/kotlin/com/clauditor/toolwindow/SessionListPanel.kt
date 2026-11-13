@@ -465,6 +465,7 @@ class SessionListPanel(
             }
         }
         tableModel.items = filtered
+        table.emptyText.text = if (sessionService.isLoaded) "No sessions" else "Loading sessions…"
     }
 
     fun refreshStatuses() {
