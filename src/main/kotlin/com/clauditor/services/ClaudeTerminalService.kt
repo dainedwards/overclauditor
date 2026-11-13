@@ -65,7 +65,7 @@ class ClaudeTerminalService(private val project: Project) {
         onUnresponsive: ((Boolean) -> Unit)? = null
     ): TerminalSession {
         return createWidget(
-            arrayOf("claude", "--worktree", worktreeName, "--name", worktreeName),
+            arrayOf("claude", "--worktree", worktreeName, "--name", worktreeName) + OverclauditorConfig.get().newSessionArgs(),
             parent, statusFile = statusFile, notifyFile = notifyFile,
             onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive        )
     }
@@ -80,7 +80,7 @@ class ClaudeTerminalService(private val project: Project) {
         onUserInput: (() -> Unit)? = null,
         onUnresponsive: ((Boolean) -> Unit)? = null
     ): TerminalSession {
-        return createWidget(arrayOf("claude"), parent, workingDir = workingDir, statusFile = statusFile, notifyFile = notifyFile,
+        return createWidget(arrayOf("claude") + OverclauditorConfig.get().newSessionArgs(), parent, workingDir = workingDir, statusFile = statusFile, notifyFile = notifyFile,
             onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
     }
 

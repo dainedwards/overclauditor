@@ -59,6 +59,11 @@ within seconds (summary).
   - **Agent: if the user already has their own `/merge`, `/push` or `/pull`**
     (`~/.claude/commands/`), ask whether the buttons should send theirs or the bundled
     `/overclauditor:*` ones.
+- **`defaultModel`** / **`defaultEffort`** (e.g. `"opus"`, `"medium"`) — what every NEW session
+  starts with (`claude --model --effort`, session-only). The toolbar's dropdowns send `/model` and
+  `/effort`, which Claude Code also saves as the default for new sessions; set these so one tab's
+  choice doesn't decide the next session's. Resumed sessions and forks keep their own.
+  **Agent: ask the user** which model and effort they want new sessions to start on.
 - **`bundledCommands`** (default `true`) — load the bundled `/overclauditor:merge`, `:push`,
   `:pull` into plugin sessions (`claude --plugin-dir <IDE system folder>/overclauditor/claude-plugin`).
   Nothing is installed into `~/.claude`. `false` leaves them out.

@@ -29,6 +29,14 @@ class OverclauditorConfigTest {
     }
 
     @Test
+    fun `new sessions get the configured model and effort, invalid values are ignored`() {
+        assertEquals(listOf("--model", "opus", "--effort", "medium"), parse("""{"defaultModel":"opus","defaultEffort":"Medium"}""").newSessionArgs())
+        assertEquals(listOf("--model", "opus[1m]"), parse("""{"defaultModel":"opus[1m]","defaultEffort":"turbo"}""").newSessionArgs())
+        assertEquals(emptyList(), parse("""{"defaultModel":"opus; rm -rf /"}""").newSessionArgs())
+        assertEquals(emptyList(), parse("{}").newSessionArgs())
+    }
+
+    @Test
     fun `special keys`() {
         assertEquals("\r\u001b\t", OverclauditorConfig.keysToBytes("enter esc tab"))
     }

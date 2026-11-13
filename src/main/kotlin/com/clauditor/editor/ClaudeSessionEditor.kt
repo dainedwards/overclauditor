@@ -1304,7 +1304,7 @@ class ClaudeSessionEditor(
         colorize(combo, colorOf = { EFFORT_COLORS[it] })
         var updating = false
 
-        claudeSetting("effortLevel")?.takeIf { it in levels }
+        (com.clauditor.services.OverclauditorConfig.get().defaultEffort ?: claudeSetting("effortLevel"))?.takeIf { it in levels }
             ?.let { updating = true; combo.selectedItem = it; updating = false }
 
         combo.addActionListener {
@@ -1348,7 +1348,7 @@ class ClaudeSessionEditor(
         var updating = false
 
         // Initial selection: live status, else the model the CLI starts with (settings.json)
-        (file.modelId?.let { idToAlias(it) } ?: claudeSetting("model")?.let { m -> aliases.firstOrNull { it == m } ?: idToAlias(m) })
+        (file.modelId?.let { idToAlias(it) } ?: (com.clauditor.services.OverclauditorConfig.get().defaultModel ?: claudeSetting("model"))?.let { m -> aliases.firstOrNull { it == m } ?: idToAlias(m) })
             ?.let { updating = true; combo.selectedItem = it; updating = false }
 
         combo.addActionListener {

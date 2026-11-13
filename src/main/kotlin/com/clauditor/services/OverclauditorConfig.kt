@@ -25,8 +25,21 @@ object OverclauditorConfig {
         /** Blank the user's own status line in plugin sessions (the toolbar shows the same information). */
         val hideTerminalStatusLine: Boolean,
         /** Load the bundled /overclauditor:merge, :push, :pull into plugin sessions (--plugin-dir). */
-        val bundledCommands: Boolean
-    )
+        val bundledCommands: Boolean,
+        /**
+         * Model and effort every NEW session starts with (claude --model / --effort, session-only).
+         * Picking in the dropdowns sends /model and /effort, which Claude Code also saves as the
+         * default for new sessions, so without these one tab's choice leaks into the next session.
+         * Null: leave it to Claude Code's own default. Resumes and forks keep their own.
+         */
+        val defaultModel: String? = null,
+        val defaultEffort: String? = null
+    ) {
+        /** Flags for a brand-new session. */
+        fun newSessionArgs(): List<String> =
+            (defaultModel?.let { listOf("--model", it) } ?: emptyList()) +
+                (defaultEffort?.let { listOf("--effort", it) } ?: emptyList())
+    }
 
     val file: Path = Path.of(System.getProperty("user.home"), ".overclauditor", "config.json")
 
@@ -78,9 +91,13 @@ object OverclauditorConfig {
             summarySource = source,
             summaryFile = summary?.get("file")?.asString?.replaceFirst("~", System.getProperty("user.home")),
             hideTerminalStatusLine = o.get("hideTerminalStatusLine")?.asBoolean ?: DEFAULT.hideTerminalStatusLine,
-            bundledCommands = o.get("bundledCommands")?.asBoolean ?: DEFAULT.bundledCommands
+            bundledCommands = o.get("bundledCommands")?.asBoolean ?: DEFAULT.bundledCommands,
+            defaultModel = o.get("defaultModel")?.asString?.trim()?.takeIf { it.matches(Regex("[A-Za-z0-9._\\[\\]-]+")) },
+            defaultEffort = o.get("defaultEffort")?.asString?.trim()?.lowercase()?.takeIf { it in EFFORTS }
         )
     }
+
+    private val EFFORTS = setOf("low", "medium", "high", "xhigh", "max")
 
     /** "Actions.Copy" → AllIcons.Actions.Copy. */
     private fun resolveIcon(name: String): Icon? = try {

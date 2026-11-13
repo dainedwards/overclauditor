@@ -16,8 +16,6 @@ import com.intellij.ui.tabs.JBTabs
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.JComponent
-import javax.swing.JMenuItem
-import javax.swing.JPopupMenu
 import javax.swing.SwingUtilities
 
 /**
@@ -180,18 +178,14 @@ class TabBarNewSessionActivity : ProjectActivity {
                 }
                 private fun maybePopup(e: MouseEvent) {
                     if (!e.isPopupTrigger || tabs.findInfo(e) != null) return
-                    JPopupMenu().apply {
-                        add(JMenuItem("New Claude Session", AllIcons.General.Add).apply {
-                            addActionListener { openNewClaudeSession(project) }
-                        })
-                        add(javax.swing.JMenu("Resume").apply {
-                            val sessions = recentSessions(project)
-                            if (sessions.isEmpty()) add(JMenuItem("No sessions").apply { isEnabled = false })
-                            for (s in sessions) add(JMenuItem(s.displayName).apply {
-                                addActionListener { openClaudeSession(project, s, focus = true) }
-                            })
-                        })
-                    }.show(e.component, e.x, e.y)
+                    // The platform's own popup (themed: hover highlight, keyboard nav), with the
+                    // same actions as the tab menu rather than a hand-built Swing copy of them.
+                    val am = com.intellij.openapi.actionSystem.ActionManager.getInstance()
+                    val group = com.intellij.openapi.actionSystem.DefaultActionGroup().apply {
+                        am.getAction("Overclauditor.NewSession")?.let { add(it) }
+                        am.getAction("Overclauditor.Resume")?.let { add(it) }
+                    }
+                    am.createActionPopupMenu("OverclauditorTabBar", group).component.show(e.component, e.x, e.y)
                 }
             })
         }
