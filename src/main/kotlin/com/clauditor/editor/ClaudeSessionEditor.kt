@@ -535,7 +535,8 @@ class ClaudeSessionEditor(
         rightPanel.add(forkButton)
         rightPanel.add(reconnectButton)
         rightPanel.add(deleteButton)
-        val historyToggle = javax.swing.JToggleButton("Messages")
+        val historyToggle = javax.swing.JToggleButton(AllIcons.Toolwindows.ToolWindowMessages)
+        historyToggle.toolTipText = "Messages"
         historyToggle.isFocusable = false
         historyToggle.addActionListener {
             val splitter = historySplitter ?: return@addActionListener
