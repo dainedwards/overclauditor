@@ -162,5 +162,8 @@
         <action id="Overclauditor.NewSession" class="com.clauditor.editor.NewClaudeSessionAction">
             <add-to-group group-id="EditorTabPopupMenu" anchor="first"/>
         </action>
+        <group id="Overclauditor.Resume" class="com.clauditor.editor.ResumeSessionGroup" popup="true" text="Resume">
+            <add-to-group group-id="EditorTabPopupMenu" anchor="after" relative-to-action="Overclauditor.NewSession"/>
+        </group>
     </actions>
 </idea-plugin>

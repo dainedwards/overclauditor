@@ -18,7 +18,8 @@ Clauditor 0.7.30 (https://github.com/bdkent/clauditor).
 - Built-in session summary via a background Haiku call, or read from your own file.
 - Pinned tab titles that change only on a worktree switch, the first file edit, /rename, or a
   new CLI title. Short tab titles (a few whole words).
-- New session from the editor tab bar (right-click or double-click, and the tab menu); no name
+- New session from the editor tab bar (right-click or double-click, and the tab menu), and a
+  Resume submenu with the last 10 sessions; no name
   prompt, the CLI titles it.
 - Icons for fork, Messages, and icon buttons; a new plugin icon.
 - `hideTerminalStatusLine`: hide your own status line inside the plugin (off by default).

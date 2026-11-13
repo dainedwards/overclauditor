@@ -112,6 +112,32 @@ class NewClaudeSessionAction : AnAction("New Claude Session", "Start a new Claud
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 }
 
+/** The Sessions pane's "Sessions" list, as it appears there (newest first), capped for a menu. */
+fun recentSessions(project: Project, limit: Int = 10): List<com.clauditor.model.SessionDisplay> =
+    com.clauditor.services.ClaudeSessionService.getInstance(project).getSessions()
+        .filter { it.worktreeName == null }
+        .take(limit)
+
+/** "Resume ▸" in the editor tab menu: the last 10 sessions; picking one opens or focuses its tab. */
+class ResumeSessionGroup : com.intellij.openapi.actionSystem.ActionGroup("Resume", true), DumbAware {
+    override fun getChildren(e: AnActionEvent?): Array<AnAction> {
+        val project = e?.project ?: return emptyArray()
+        val sessions = recentSessions(project)
+        if (sessions.isEmpty()) return arrayOf(object : AnAction("No sessions") {
+            override fun actionPerformed(e: AnActionEvent) {}
+            override fun update(e: AnActionEvent) { e.presentation.isEnabled = false }
+            override fun getActionUpdateThread() = ActionUpdateThread.BGT
+        })
+        return sessions.map { s ->
+            object : AnAction(s.displayName) {
+                override fun actionPerformed(e: AnActionEvent) { openClaudeSession(project, s, focus = true) }
+            }
+        }.toTypedArray()
+    }
+    override fun update(e: AnActionEvent) { e.presentation.isEnabledAndVisible = e.project != null }
+    override fun getActionUpdateThread() = ActionUpdateThread.BGT
+}
+
 /**
  * The empty part of the editor tab bar (past the last tab) has no menu of its own. Give it
  * one: right-click shows "New Claude Session", double-click opens one directly. Installed
@@ -157,6 +183,13 @@ class TabBarNewSessionActivity : ProjectActivity {
                     JPopupMenu().apply {
                         add(JMenuItem("New Claude Session", AllIcons.General.Add).apply {
                             addActionListener { openNewClaudeSession(project) }
+                        })
+                        add(javax.swing.JMenu("Resume").apply {
+                            val sessions = recentSessions(project)
+                            if (sessions.isEmpty()) add(JMenuItem("No sessions").apply { isEnabled = false })
+                            for (s in sessions) add(JMenuItem(s.displayName).apply {
+                                addActionListener { openClaudeSession(project, s, focus = true) }
+                            })
                         })
                     }.show(e.component, e.x, e.y)
                 }
