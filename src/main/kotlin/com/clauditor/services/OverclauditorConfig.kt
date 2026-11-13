@@ -60,6 +60,7 @@ object OverclauditorConfig {
             val b = e.asJsonObject
             val label = b.get("label")?.asString
             val icon = b.get("icon")?.asString?.let(::resolveIcon)
+                ?.let { base -> b.get("badge")?.asString?.takeIf { it.isNotBlank() }?.let { BadgeIcon(base, it.take(2)) } ?: base }
             val send = b.get("send")?.asString?.let { if (it.startsWith("/")) "$it\r" else it }
                 ?: b.get("keys")?.asString?.let(::keysToBytes)
                 ?: return@mapNotNull null
@@ -98,6 +99,26 @@ object OverclauditorConfig {
             else if (key == "esc") append('\u001b')
             else if (key == "tab") append('\t')
             else append(key)
+        }
+    }
+}
+
+/** An icon with a short mark (e.g. "*") in its top-right corner: "run" vs "run this worktree". */
+class BadgeIcon(private val base: Icon, private val mark: String) : Icon {
+    override fun getIconWidth() = base.iconWidth
+    override fun getIconHeight() = base.iconHeight
+    override fun paintIcon(c: java.awt.Component?, g: java.awt.Graphics, x: Int, y: Int) {
+        base.paintIcon(c, g, x, y)
+        val g2 = g.create() as java.awt.Graphics2D
+        try {
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+            g2.font = (c?.font ?: java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 11))
+                .deriveFont(java.awt.Font.BOLD, com.intellij.util.ui.JBUI.scale(11).toFloat())
+            val fm = g2.fontMetrics
+            g2.color = com.intellij.ui.JBColor(java.awt.Color(0xE0, 0x7B, 0x2E), java.awt.Color(0xFF, 0xC5, 0x3D))
+            g2.drawString(mark, x + iconWidth - fm.stringWidth(mark) + com.intellij.util.ui.JBUI.scale(3), y + fm.ascent - com.intellij.util.ui.JBUI.scale(3))
+        } finally {
+            g2.dispose()
         }
     }
 }

@@ -46,7 +46,8 @@ within seconds (summary).
 - **`buttons`** — the session toolbar's command buttons, in order.
   - `label` makes a text button (left of the fork icon, all one width). `icon` makes an icon
     button (after Messages): any `AllIcons` name as `Group.Name`, e.g. `Actions.Copy`,
-    `Actions.Execute`, `General.Settings`.
+    `Actions.Execute`, `General.Settings`. `"badge": "*"` adds a short mark to the icon's
+    corner, to tell two similar icons apart (e.g. run vs run-this-worktree).
   - `send` types text into the session; a value starting with `/` is a slash command and gets
     Enter appended. `keys` sends key chords instead: `ctrl+<letter>`, `enter`, `esc`, `tab`,
     space-separated for a sequence. Bind a chord to a command in

@@ -5,6 +5,8 @@ the rest, 2024.3+) that runs Claude Code sessions as editor tabs, with a toolbar
 that show everything about a session at a glance. A fork of
 [Clauditor](https://github.com/bdkent/clauditor) by bdkent.
 
+![Overclauditor in IntelliJ IDEA](docs/screenshot.png)
+
 ![Overclauditor features](docs/overclauditor-features.svg)
 
 **Install and configure: [docs/SETUP.md](docs/SETUP.md).** What changed from Clauditor:

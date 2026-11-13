@@ -106,11 +106,12 @@ class ClaudeSessionEditor(
         isOpaque = false
     }
     /** Session gist + what to test, from the status-line script's Haiku summary cache. */
+    private var lastSummaryNatural = -1
     private var summaryGist = ""
     private var summaryTest = ""
     private val summaryBaseFont = JBUI.Fonts.label()
     private val summaryLabel: JBLabel = JBLabel("").apply {
-        border = JBUI.Borders.empty(0, 8)
+        border = JBUI.Borders.empty(0, 3)
         minimumSize = java.awt.Dimension(0, 0)
         // Never ask for height: the row stays as tall as the buttons, and long text wraps
         // into it at a smaller size instead of growing the bar.
@@ -469,8 +470,14 @@ class ClaudeSessionEditor(
         }
     }
 
+    /** A row that is always exactly its content's width: BoxLayout neither stretches nor squeezes it. */
+    private fun fixedRow() = object : JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 2)) {
+        override fun getMaximumSize(): java.awt.Dimension = preferredSize
+        override fun getMinimumSize(): java.awt.Dimension = preferredSize
+    }
+
     private fun createToolbar(gitPanel: JComponent?): JComponent {
-        val leftPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 2))
+        val leftPanel = fixedRow()
 
         leftPanel.add(createModelDropdown())
 
@@ -515,7 +522,7 @@ class ClaudeSessionEditor(
             ClaudeSessionService.getInstance(project).deleteSession(sessionId)
         }
 
-        val rightPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 4, 2))
+        val rightPanel = fixedRow()
         // Buttons from ~/.overclauditor/config.json: text ones here, icon ones after Messages.
         val configButtons = com.clauditor.services.OverclauditorConfig.get().buttons
         val slashButtons = configButtons.filter { it.icon == null }.map { b ->
@@ -534,9 +541,9 @@ class ClaudeSessionEditor(
             it.minimumSize = size
             rightPanel.add(it)
         }
-        rightPanel.add(forkButton)
-        rightPanel.add(reconnectButton)
-        rightPanel.add(deleteButton)
+        rightPanel.add(squareIcon(forkButton))
+        rightPanel.add(squareIcon(reconnectButton!!))
+        rightPanel.add(squareIcon(deleteButton))
         val historyToggle = javax.swing.JToggleButton(AllIcons.Toolwindows.ToolWindowMessages)
         historyToggle.toolTipText = "Messages"
         historyToggle.isFocusable = false
@@ -548,19 +555,24 @@ class ClaudeSessionEditor(
                 splitter.secondComponent = null
             }
         }
-        rightPanel.add(historyToggle)
+        rightPanel.add(squareIcon(historyToggle))
         for (b in configButtons.filter { it.icon != null }) {
-            rightPanel.add(javax.swing.JButton(b.icon).apply {
+            rightPanel.add(squareIcon(javax.swing.JButton(b.icon)).apply {
                 isFocusable = false
                 toolTipText = b.tooltip
                 addActionListener { sendToTerminal(b.send) }
             })
         }
 
-        val toolbar = JPanel(BorderLayout())
-        toolbar.add(leftPanel, BorderLayout.WEST)
-        toolbar.add(summaryLabel, BorderLayout.CENTER)
-        toolbar.add(rightPanel, BorderLayout.EAST)
+        // Packed left: controls, summary, buttons, then any spare room. The summary is the only
+        // part that shrinks (wrapping smaller), so the buttons sit right after it, not across a gap.
+        val toolbar = JPanel().apply {
+            layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.X_AXIS)
+            add(leftPanel)
+            add(summaryLabel)
+            add(rightPanel)
+            add(javax.swing.Box.createHorizontalGlue())
+        }
         return toolbar
     }
 
@@ -603,7 +615,7 @@ class ClaudeSessionEditor(
             com.clauditor.util.ClauditorExecutor.submit {
                 try {
                     val branch = execGit(gitDir, "branch", "--show-current").trim()
-                    val status = execGit(gitDir, "status", "--porcelain").trim()
+                    val status = execGit(gitDir, "status", "--porcelain").trimEnd()  // not trim(): " M path" lines start with a space
                     val changedFiles = if (status.isEmpty()) emptyList() else status.lines()
                         .filter { it.isNotBlank() }
                         .mapNotNull { line ->
@@ -1185,7 +1197,7 @@ class ClaudeSessionEditor(
             opsTail.consume(jsonlPath, onRestart = { sessionFilePaths.clear() }) { line ->
                 // Cheap substring gate first: most lines (API blobs, tool output) carry no
                 // Write/Edit call and are never JSON-parsed.
-                if (line.contains("\"name\":\"Edit\"") || line.contains("\"name\":\"Write\"")) {
+                if (EDIT_OR_WRITE.containsMatchIn(line)) {
                     appendFilePaths(line, sessionFilePaths)
                 }
             }
@@ -1224,22 +1236,44 @@ class ClaudeSessionEditor(
         fun sync() {
             combo.foreground = (combo.selectedItem as? String)?.let(colorOf) ?: UIManager.getColor("ComboBox.foreground")
             combo.font = combo.font.deriveFont(java.awt.Font.BOLD)
+            fitWidth(combo, labelOf)
         }
         combo.addItemListener { sync() }
         sync()
-        fitWidth(combo, labelOf)
+    }
+
+    /**
+     * Icon-only buttons as squares. Some IDE themes (IntelliJ IDEA's) give every JButton a 72px
+     * minimum width, which ate the toolbar's room for the summary.
+     */
+    private fun <T : javax.swing.AbstractButton> squareIcon(b: T): T {
+        b.margin = JBUI.emptyInsets()
+        // As tall as a text button; 48px wide (the theme default of 72 crowded out the summary).
+        val h = maxOf(javax.swing.JButton("plan").preferredSize.height, JBUI.scale(28))
+        val size = java.awt.Dimension(JBUI.scale(48), h)
+        b.preferredSize = size
+        b.minimumSize = size
+        b.maximumSize = size
+        return b
     }
 
     /** Size a combo to its longest label plus the arrow, instead of the theme's wide minimum. */
+    /**
+     * Size a combo to the option it is SHOWING (not the longest one) plus the arrow, so there's
+     * no gap after the text; it resizes when the selection changes. The popup sizes itself.
+     */
     private fun fitWidth(combo: javax.swing.JComboBox<String>, labelOf: (String) -> String) {
+        val selected = combo.selectedItem as? String ?: return
         val fm = combo.getFontMetrics(combo.font.deriveFont(java.awt.Font.BOLD))
-        val text = (0 until combo.itemCount).maxOf { fm.stringWidth(labelOf(combo.getItemAt(it))) }
         val arrow = combo.components.firstOrNull { it is javax.swing.JButton }?.preferredSize?.width ?: JBUI.scale(20)
         val ins = combo.insets
-        val size = java.awt.Dimension(text + arrow + ins.left + ins.right + JBUI.scale(14), combo.preferredSize.height)
+        val w = fm.stringWidth(labelOf(selected)) + arrow + ins.left + ins.right + JBUI.scale(COMBO_TEXT_PAD)
+        val size = java.awt.Dimension(w, combo.preferredSize.height)
         combo.preferredSize = size
         combo.minimumSize = size
+        combo.maximumSize = size
         combo.revalidate()
+        combo.parent?.let { it.revalidate(); it.repaint() }
     }
 
     /** Last-wins read of a top-level key from user, project and project-local Claude settings. */
@@ -1264,7 +1298,7 @@ class ClaudeSessionEditor(
 
     private fun createEffortDropdown(): JComponent {
         val levels = arrayOf("low", "medium", "high", "xhigh", "max")
-        val combo = javax.swing.JComboBox(levels)
+        val combo = com.intellij.openapi.ui.ComboBox(levels).apply { isSwingPopup = false }  // popup sizes to its items
         combo.isFocusable = false
         combo.toolTipText = "Effort level"
         colorize(combo, colorOf = { EFFORT_COLORS[it] })
@@ -1308,7 +1342,7 @@ class ClaudeSessionEditor(
         }
         fun labelOf(alias: String) = alias.replaceFirstChar { it.uppercase() } + (MODEL_VERSIONS[alias]?.let { " $it" } ?: "")
 
-        val combo = javax.swing.JComboBox(aliases)
+        val combo = com.intellij.openapi.ui.ComboBox(aliases).apply { isSwingPopup = false }  // popup sizes to its items
         combo.isFocusable = false
         colorize(combo, ::labelOf) { a -> MODEL_COLORS[a] }
         var updating = false
@@ -1686,7 +1720,20 @@ class ClaudeSessionEditor(
             val t = if (w.bold) "<b>${esc(w.text)}</b>" else esc(w.text)
             return if (w.color != null) "<span style='color:${w.color}'>$t</span>" else t
         }
+        // Ask for the one-line width (no more): BoxLayout shrinks it from there when space is short.
+        // Measured by the label's own HTML view, which is what is drawn; font metrics on the bare
+        // words came out wider and left a gap before the buttons.
+        summaryLabel.font = summaryBaseFont
+        summaryLabel.text = "<html><nobr>" + words.joinToString(" ") { html(it) } + "</nobr></html>"
+        summaryLabel.preferredSize = null
+        val natural = summaryLabel.preferredSize.width
         summaryLabel.font = summaryBaseFont.deriveFont(size)
+        if (lastSummaryNatural != natural) {
+            lastSummaryNatural = natural
+            summaryLabel.parent?.revalidate()
+        }
+        summaryLabel.preferredSize = java.awt.Dimension(natural, 1)
+        summaryLabel.maximumSize = java.awt.Dimension(natural, Int.MAX_VALUE)
         summaryLabel.text = "<html><nobr>" + lines.joinToString("<br>") { l -> l.joinToString(" ") { html(it) } } + "</nobr></html>"
     }
 
@@ -1858,6 +1905,11 @@ class ClaudeSessionEditor(
         }
 
         private const val MIN_SUMMARY_FONT = 9f
+        /** Room the combo's value painter needs beyond the bare text (its left inset). */
+        private const val COMBO_TEXT_PAD = 10
+
+        /** A Write/Edit tool call anywhere in a transcript line (JSON spacing may vary). */
+        private val EDIT_OR_WRITE = Regex("\"name\"\\s*:\\s*\"(Edit|Write)\"")
 
         private val COLOR_GREEN = Color(0x5B, 0xA8, 0x5B)
         private val COLOR_YELLOW = Color(0xD4, 0xA0, 0x1E)

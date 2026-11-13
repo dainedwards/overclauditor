@@ -23,6 +23,12 @@ class OverclauditorConfigTest {
     }
 
     @Test
+    fun `a badge wraps the icon`() {
+        val c = parse("""{"buttons":[{"icon":"Actions.Execute","badge":"*","keys":"ctrl+x ctrl+r"}]}""")
+        assertTrue(c.buttons.single().icon is BadgeIcon)
+    }
+
+    @Test
     fun `special keys`() {
         assertEquals("\r\u001b\t", OverclauditorConfig.keysToBytes("enter esc tab"))
     }
