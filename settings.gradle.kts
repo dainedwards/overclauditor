@@ -1,4 +1,4 @@
-rootProject.name = "clauditor"
+rootProject.name = "overclauditor"
 
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0"

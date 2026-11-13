@@ -32,7 +32,7 @@ class ClauditorSettingsConfigurable : Configurable {
     private var branchRefreshSpinner: JSpinner? = null
     private var poolMaxSpinner: JSpinner? = null
 
-    override fun getDisplayName(): String = "Clauditor"
+    override fun getDisplayName(): String = "Overclauditor"
 
     override fun createComponent(): JComponent {
         echoTimeoutSpinner = JSpinner(SpinnerNumberModel(3000, 1000, 30000, 500)).apply {

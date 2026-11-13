@@ -1,10 +1,10 @@
 <idea-plugin>
-    <id>com.clauditor</id>
-    <name>Clauditor - Claude Code Session Manager</name>
+    <id>com.overclauditor</id>
+    <name>Overclauditor</name>
     <vendor url="https://github.com/bdkent/clauditor">bdkent</vendor>
 
     <description><![CDATA[
-    <p>Clauditor manages your Claude Code sessions from inside your JetBrains IDE. Browse, search, resume, and fork sessions; run them in git worktrees; and watch their status live — without leaving the editor or juggling terminal windows.</p>
+    <p><b>Overclauditor</b> is a fork of Clauditor by bdkent (https://github.com/bdkent/clauditor). Clauditor manages your Claude Code sessions from inside your JetBrains IDE. Browse, search, resume, and fork sessions; run them in git worktrees; and watch their status live — without leaving the editor or juggling terminal windows.</p>
 
     <p><b>Session Management</b></p>
     <ul>
@@ -149,7 +149,7 @@
             parentId="tools"
             instance="com.clauditor.settings.ClauditorSettingsConfigurable"
             id="com.clauditor.settings.ClauditorSettingsConfigurable"
-            displayName="Clauditor"
+            displayName="Overclauditor"
         />
     </extensions>
 </idea-plugin>
