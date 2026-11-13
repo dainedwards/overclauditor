@@ -84,7 +84,8 @@ class ClaudeSessionsToolWindowFactory : ToolWindowFactory, DumbAware {
             FileEditorManagerListener.FILE_EDITOR_MANAGER, editorListener
         )
 
-        restoreOpenSessions(project, sessionService)
+        // Tabs open at shutdown are restored at project startup (TabBarNewSessionActivity),
+        // not here: this only runs when the Sessions pane is first shown.
     }
 
     private data class SessionCallbacks(
@@ -100,23 +101,7 @@ class ClaudeSessionsToolWindowFactory : ToolWindowFactory, DumbAware {
     }
 
     private fun openSession(project: Project, session: SessionDisplay) {
-        val manager = FileEditorManager.getInstance(project)
-
-        // Focus existing tab if already open
-        val existing = manager.openFiles.filterIsInstance<ClaudeSessionVirtualFile>()
-            .find { it.sessionId == session.sessionId }
-        if (existing != null) {
-            manager.openFile(existing, true)
-            return
-        }
-
-        val file = ClaudeSessionVirtualFile(session.tabTitle, session.sessionId).apply {
-            if (session.worktreeName != null && project.basePath != null) {
-                workingDir = ClaudePathEncoder.worktreeAbsolutePath(project.basePath!!, session.worktreeName)
-                isWorktreeSession = true
-            }
-        }
-        manager.openFile(file, true)
+        com.clauditor.editor.openClaudeSession(project, session, focus = true)
     }
 
     private fun openNewSession(project: Project, name: String) {
@@ -147,20 +132,6 @@ class ClaudeSessionsToolWindowFactory : ToolWindowFactory, DumbAware {
             }
         }
         FileEditorManager.getInstance(project).openFile(file, true)
-    }
-
-    private fun restoreOpenSessions(project: Project, sessionService: ClaudeSessionService) {
-        val persistence = OpenSessionsPersistence.getInstance(project)
-        val savedIds = persistence.getAll()
-        if (savedIds.isEmpty()) return
-
-        ApplicationManager.getApplication().invokeLater {
-            val sessions = sessionService.getSessions().associateBy { it.sessionId }
-            for (sessionId in savedIds) {
-                val session = sessions[sessionId] ?: continue
-                openSession(project, session)
-            }
-        }
     }
 
     override fun shouldBeAvailable(project: Project): Boolean = project.basePath != null

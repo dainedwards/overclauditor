@@ -20,6 +20,48 @@ import javax.swing.JMenuItem
 import javax.swing.JPopupMenu
 import javax.swing.SwingUtilities
 
+/** Open (or focus) a tab for an existing session. */
+fun openClaudeSession(project: Project, session: com.clauditor.model.SessionDisplay, focus: Boolean) {
+    val manager = FileEditorManager.getInstance(project)
+    val existing = manager.openFiles.filterIsInstance<ClaudeSessionVirtualFile>().find { it.sessionId == session.sessionId }
+    if (existing != null) {
+        if (focus) manager.openFile(existing, true)
+        return
+    }
+    val file = ClaudeSessionVirtualFile(session.tabTitle, session.sessionId).apply {
+        if (session.worktreeName != null && project.basePath != null) {
+            workingDir = com.clauditor.util.ClaudePathEncoder.worktreeAbsolutePath(project.basePath!!, session.worktreeName)
+            isWorktreeSession = true
+        }
+    }
+    manager.openFile(file, focus)
+}
+
+/**
+ * Reopen the session tabs that were open at shutdown. Runs at project startup whether or not
+ * the Sessions pane is showing, and waits for the session list's first background scan:
+ * the list is empty until it lands, and restoring against that found nothing.
+ */
+fun restoreOpenSessions(project: Project) {
+    val saved = com.clauditor.services.OpenSessionsPersistence.getInstance(project).getAll()
+    if (saved.isEmpty()) return
+    val service = com.clauditor.services.ClaudeSessionService.getInstance(project)
+    fun restore() {
+        val byId = service.getSessions().associateBy { it.sessionId }
+        for (id in saved) byId[id]?.let { openClaudeSession(project, it, focus = false) }
+    }
+    if (service.isLoaded) { restore(); return }
+    val listener = object : () -> Unit {
+        override fun invoke() {
+            if (!service.isLoaded || project.isDisposed) return
+            service.removeChangeListener(this)
+            restore()
+        }
+    }
+    service.addChangeListener(listener)
+    service.refresh()
+}
+
 /** Open a fresh Claude session tab; the CLI titles it after the first message. */
 fun openNewClaudeSession(project: Project) {
     FileEditorManager.getInstance(project).openFile(ClaudeSessionVirtualFile("New session"), true)
@@ -44,6 +86,7 @@ class TabBarNewSessionActivity : ProjectActivity {
         com.clauditor.util.ClauditorExecutor.submit { com.clauditor.util.OcPaths.sweepStaleTempFiles() }
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
+            restoreOpenSessions(project)
             installAll(project)
             project.messageBus.connect().subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER,
                 object : FileEditorManagerListener {
