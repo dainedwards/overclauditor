@@ -478,7 +478,7 @@ class ClaudeSessionEditor(
 
         gitPanel?.let { leftPanel.add(it) }
 
-        val forkButton = javax.swing.JButton(com.intellij.icons.AllIcons.Actions.Copy)
+        val forkButton = javax.swing.JButton(com.intellij.openapi.util.IconLoader.getIcon("/icons/fork.svg", ClaudeSessionEditor::class.java))
         forkButton.toolTipText = "Fork — open a new session branched from this one"
         forkButton.isFocusable = false
         forkButton.addActionListener {
@@ -516,12 +516,21 @@ class ClaudeSessionEditor(
         }
 
         val rightPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 4, 2))
-        for (cmd in SLASH_BUTTONS) {
-            rightPanel.add(javax.swing.JButton(cmd).apply {
+        val slashButtons = SLASH_BUTTONS.map { cmd ->
+            javax.swing.JButton(cmd).apply {
                 isFocusable = false
                 toolTipText = "Send /$cmd"
                 addActionListener { sendToTerminal("/$cmd\r") }
-            })
+            }
+        }
+        // All the same width, sized to the longest label rather than the theme's 72px minimum.
+        val slashWidth = slashButtons.maxOf { it.getFontMetrics(it.font).stringWidth(it.text) } + JBUI.scale(20)
+        slashButtons.forEach {
+            it.margin = JBUI.insets(0, 4)
+            val size = java.awt.Dimension(slashWidth, it.preferredSize.height)
+            it.preferredSize = size
+            it.minimumSize = size
+            rightPanel.add(it)
         }
         rightPanel.add(forkButton)
         rightPanel.add(reconnectButton)
@@ -537,6 +546,18 @@ class ClaudeSessionEditor(
             }
         }
         rightPanel.add(historyToggle)
+        // The same chords as the user's hotkeys (~/.claude/keybindings.json), so the buttons run
+        // the existing playtest and copy-prompt mods instead of a second implementation.
+        rightPanel.add(javax.swing.JButton(AllIcons.Actions.Copy).apply {
+            isFocusable = false
+            toolTipText = "Copy prompt"
+            addActionListener { sendToTerminal(CHORD_COPY_PROMPT) }
+        })
+        rightPanel.add(javax.swing.JButton(AllIcons.Actions.Execute).apply {
+            isFocusable = false
+            toolTipText = "Playtest"
+            addActionListener { sendToTerminal(CHORD_PLAYTEST) }
+        })
 
         val toolbar = JPanel(BorderLayout())
         toolbar.add(leftPanel, BorderLayout.WEST)
@@ -1190,9 +1211,13 @@ class ClaudeSessionEditor(
     }
 
     /** Paint each combo entry (and the closed combo) in its own colour. */
-    private fun colorize(combo: javax.swing.JComboBox<String>, colorOf: (String) -> Color?) {
+    private fun colorize(
+        combo: javax.swing.JComboBox<String>,
+        labelOf: (String) -> String = { it },
+        colorOf: (String) -> Color?
+    ) {
         combo.renderer = com.intellij.ui.SimpleListCellRenderer.create { label, value, _ ->
-            label.text = value ?: ""
+            label.text = value?.let(labelOf) ?: ""
             label.foreground = value?.let(colorOf) ?: UIManager.getColor("Label.foreground")
             label.font = label.font.deriveFont(java.awt.Font.BOLD)
         }
@@ -1203,6 +1228,19 @@ class ClaudeSessionEditor(
         }
         combo.addItemListener { sync() }
         sync()
+        fitWidth(combo, labelOf)
+    }
+
+    /** Size a combo to its longest label plus the arrow, instead of the theme's wide minimum. */
+    private fun fitWidth(combo: javax.swing.JComboBox<String>, labelOf: (String) -> String) {
+        val fm = combo.getFontMetrics(combo.font.deriveFont(java.awt.Font.BOLD))
+        val text = (0 until combo.itemCount).maxOf { fm.stringWidth(labelOf(combo.getItemAt(it))) }
+        val arrow = combo.components.firstOrNull { it is javax.swing.JButton }?.preferredSize?.width ?: JBUI.scale(20)
+        val ins = combo.insets
+        val size = java.awt.Dimension(text + arrow + ins.left + ins.right + JBUI.scale(14), combo.preferredSize.height)
+        combo.preferredSize = size
+        combo.minimumSize = size
+        combo.revalidate()
     }
 
     /** Last-wins read of a top-level key from user, project and project-local Claude settings. */
@@ -1230,7 +1268,7 @@ class ClaudeSessionEditor(
         val combo = javax.swing.JComboBox(levels)
         combo.isFocusable = false
         combo.toolTipText = "Effort level"
-        colorize(combo) { EFFORT_COLORS[it] }
+        colorize(combo, colorOf = { EFFORT_COLORS[it] })
         var updating = false
 
         claudeSetting("effortLevel")?.takeIf { it in levels }
@@ -1262,24 +1300,18 @@ class ClaudeSessionEditor(
     }
 
     private fun createModelDropdown(): JComponent {
-        val aliases = arrayOf("fable", "opus", "sonnet", "haiku", "opus[1m]", "sonnet[1m]", "opusplan")
+        val aliases = arrayOf("fable", "opus", "sonnet", "haiku")
 
         // Map model IDs from the status line to the alias used in /model
         fun idToAlias(modelId: String): String? {
             val id = modelId.lowercase()
-            val has1m = id.contains("[1m]")
-            return when {
-                id.contains("fable") -> "fable"
-                id.contains("opus") -> if (has1m) "opus[1m]" else "opus"
-                id.contains("sonnet") -> if (has1m) "sonnet[1m]" else "sonnet"
-                id.contains("haiku") -> "haiku"
-                else -> null
-            }
+            return aliases.firstOrNull { id.contains(it) }
         }
+        fun labelOf(alias: String) = alias.replaceFirstChar { it.uppercase() } + (MODEL_VERSIONS[alias]?.let { " $it" } ?: "")
 
         val combo = javax.swing.JComboBox(aliases)
         combo.isFocusable = false
-        colorize(combo) { a -> MODEL_COLORS.entries.firstOrNull { a.startsWith(it.key) }?.value }
+        colorize(combo, ::labelOf) { a -> MODEL_COLORS[a] }
         var updating = false
 
         // Initial selection: live status, else the model the CLI starts with (settings.json)
@@ -1298,7 +1330,14 @@ class ClaudeSessionEditor(
             val monitoringId = file.sessionId ?: return@listener
             if (sid != monitoringId) return@listener
             val matched = status?.modelId?.let { idToAlias(it) } ?: return@listener
+            // "Opus 5.5" → remember 5.5 for opus, so labels follow new releases
+            val learned = status.modelName?.substringAfter(' ', "")?.takeIf { it.isNotEmpty() && it != MODEL_VERSIONS[matched] }
             ApplicationManager.getApplication().invokeLater {
+                if (learned != null) {
+                    MODEL_VERSIONS[matched] = learned
+                    fitWidth(combo, ::labelOf)
+                    combo.repaint()
+                }
                 if (combo.selectedItem != matched) {
                     updating = true
                     combo.selectedItem = matched
@@ -1738,7 +1777,16 @@ class ClaudeSessionEditor(
         )
 
         /** Project skills sent as slash commands from the git row, in display order. */
-        private val SLASH_BUTTONS = listOf("merge", "push", "pull")
+        private val SLASH_BUTTONS = listOf("plan", "merge", "push", "pull")
+
+        /** ctrl+X ctrl+R → command:playtest, ctrl+X ctrl+Y → command:copyprompt. */
+        private const val CHORD_PLAYTEST = "\u0018\u0012"
+        private const val CHORD_COPY_PROMPT = "\u0018\u0019"
+
+        /** Version shown beside each model; seeded with current releases, updated from the status line. */
+        private val MODEL_VERSIONS = java.util.concurrent.ConcurrentHashMap(
+            mapOf("fable" to "5.2", "opus" to "5.5", "sonnet" to "5.5", "haiku" to "5.5")
+        )
 
         private const val GIT_TIMEOUT_MS = 15_000L
         private const val GIT_OUTPUT_LIMIT = 400
