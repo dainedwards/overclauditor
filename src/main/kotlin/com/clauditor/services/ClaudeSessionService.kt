@@ -54,6 +54,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         val offset: Long = 0,
         val firstPrompt: String? = null,
         val customTitle: String? = null,
+        val renamedTitle: String? = null,
         val aiTitle: String? = null,
         val messageCount: Int = 0,
         val gitBranch: String? = null,
@@ -62,7 +63,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
 
     private val indexFile: Path by lazy {
         val key = Integer.toHexString((project.basePath ?: project.name).hashCode())
-        Path.of(System.getProperty("user.home"), ".overclauditor", "session-index", "$key.json")
+        Path.of(System.getProperty("user.home"), ".overclauditor", "session-index", "$key.v2.json")
     }
 
     private val savedIndex: Map<String, IndexEntry> by lazy {
@@ -80,6 +81,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         acc.tail.restore(e.offset)
         acc.firstPrompt = e.firstPrompt
         acc.customTitle = e.customTitle
+        acc.renamedTitle = e.renamedTitle
         acc.aiTitle = e.aiTitle
         acc.messageCount = e.messageCount
         acc.gitBranch = e.gitBranch
@@ -93,7 +95,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
             for ((path, acc) in accumulators) {
                 synchronized(acc) {
                     out[path.toString()] = IndexEntry(
-                        acc.tail.offset, acc.firstPrompt, acc.customTitle, acc.aiTitle,
+                        acc.tail.offset, acc.firstPrompt, acc.customTitle, acc.renamedTitle, acc.aiTitle,
                         acc.messageCount, acc.gitBranch, acc.lastTimestamp.toEpochMilli()
                     )
                 }
@@ -114,7 +116,10 @@ class ClaudeSessionService(private val project: Project) : Disposable {
     private class SessionAccumulator {
         val tail = com.clauditor.util.JsonlTailReader()
         var firstPrompt: String? = null
+        /** A custom title written before the first prompt: `claude --name` at launch. */
         var customTitle: String? = null
+        /** A custom title written after the first prompt: an explicit /rename. */
+        var renamedTitle: String? = null
         var aiTitle: String? = null
         var messageCount = 0
         var gitBranch: String? = null
@@ -124,6 +129,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         fun reset() {
             firstPrompt = null
             customTitle = null
+            renamedTitle = null
             aiTitle = null
             messageCount = 0
             gitBranch = null
@@ -412,7 +418,9 @@ class ClaudeSessionService(private val project: Project) : Disposable {
 
             return SessionDisplay(
                 sessionId = sessionId,
-                name = acc.customTitle ?: acc.aiTitle,
+                name = TitleStore.get(sessionId)?.title ?: acc.renamedTitle ?: acc.aiTitle ?: acc.customTitle,
+                aiTitle = acc.aiTitle,
+                renamedTitle = acc.renamedTitle,
                 firstPrompt = firstPrompt,
                 messageCount = acc.messageCount,
                 modified = modified,
@@ -464,8 +472,10 @@ class ClaudeSessionService(private val project: Project) : Disposable {
 
             if (type == "user" || type == "assistant") acc.messageCount++
 
-            // /rename writes a custom-title entry; keep the last one
-            if (type == "custom-title") acc.customTitle = customTitle
+            // custom-title before the first prompt is the launch name (--name); after it, a /rename
+            if (type == "custom-title") {
+                if (acc.firstPrompt == null) acc.customTitle = customTitle else acc.renamedTitle = customTitle
+            }
 
             // The CLI's own generated title; keep the last one
             if (type == "ai-title") aiTitle?.takeIf { it.isNotBlank() }?.let { acc.aiTitle = it }

@@ -15,3 +15,6 @@ Fork of Clauditor (bdkent/clauditor, remote `upstream`) with the owner's changes
   renderer off (`fullscreenAutoDisabled` in `~/.claude.json`). Exit with `/exit`.
 - A Kotlin top-level `val` between `@Service` and its class steals the annotation; the
   service then never registers and the Sessions pane comes up empty.
+- **Tab titles are pinned** (`TitleStore`, `~/.overclauditor/titles.json`) and change only on
+  /rename, a new CLI ai-title, a worktree change, or the session's first file write — the
+  user wants them to change RARELY. Read the comment above `syncTitle` before adding a trigger.

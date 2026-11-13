@@ -188,12 +188,7 @@ class ClaudeSessionEditor(
 
         // Sync tab title when session names change (e.g. after /rename)
         val nameListener: () -> Unit = {
-            file.sessionId?.let { sid ->
-                sessionService.getSessions().find { it.sessionId == sid }?.tabTitle?.let {
-                    file.baseName = it
-                    refreshTabTitle()
-                }
-            }
+            file.sessionId?.let { sid -> syncTitle(sessionService.getSessions().find { it.sessionId == sid }) }
         }
         sessionService.addChangeListener(nameListener)
         Disposer.register(rootDisposable, Disposable { sessionService.removeChangeListener(nameListener) })
@@ -410,6 +405,7 @@ class ClaudeSessionEditor(
 
         val statusListener: (String, ClaudeStatus?) -> Unit = { sid, status ->
             if (sid == monitoringId || sid == file.sessionId) {
+                status?.cwd?.let { noteWorktree(worktreeOf(it)) }
                 file.modelId = status?.modelId
                 file.modelName = status?.modelName
                 file.contextPercent = status?.contextRemainingPercent
@@ -627,6 +623,7 @@ class ClaudeSessionEditor(
                     } else 0
 
                     ApplicationManager.getApplication().invokeLater {
+                        if (sessionFiles.isNotEmpty()) noteWorkStarted()
                         branchName.text = branch
                         branchName.foreground = if (branch == "main" || branch == "master") COLOR_ORANGE else COLOR_GREEN
                         statsLabel.text = when {
@@ -1517,6 +1514,95 @@ class ClaudeSessionEditor(
         }
     }
 
+    // ---- Tab title: pinned, changed only on a few events ----
+    //
+    // Titles used to follow the transcript's custom title forever, and the original plugin's
+    // `claude --name` launch wrote one into every session, so a tab kept its launch name for
+    // good. Now the title is pinned (TitleStore) and moves only when:
+    //  - the user runs /rename (always wins; no automatic changes after it),
+    //  - the CLI writes a new ai-title of its own (rare, at big turns),
+    //  - the session moves into a different worktree, or
+    //  - the session first writes or edits a file (a question turned into work).
+    // The last two take the status line's session summary (2-5 words) as the new title.
+
+    /** When a retitle event fired and is waiting for a fresh summary; 0 when none is. */
+    private var retitlePendingSince = 0L
+    /** Worktree from the first status report; titles aren't pinned before it is known. */
+    private var knownWorktree: String? = null
+
+    private fun worktreeOf(cwd: String): String =
+        Regex("/\\.claude/worktrees/([^/]+)").find(cwd)?.groupValues?.get(1) ?: ""
+
+    private fun applyTitle(title: String) {
+        val short = com.clauditor.model.shortTitle(title)
+        if (file.baseName != short) {
+            file.baseName = short
+            refreshTabTitle()
+        }
+    }
+
+    /** List changed: pin a first title, or follow a /rename or a new CLI title. */
+    private fun syncTitle(s: com.clauditor.model.SessionDisplay?) {
+        val sid = file.sessionId ?: return
+        val store = com.clauditor.services.TitleStore
+        val e = store.get(sid)
+        if (e == null) {
+            val title = s?.renamedTitle ?: s?.aiTitle ?: s?.name ?: summaryGist.ifEmpty { null } ?: s?.firstPrompt ?: return
+            val wt = knownWorktree
+            if (wt == null) { applyTitle(title); return }  // pin once the worktree is known
+            store.put(sid, com.clauditor.services.TitleStore.Entry(title, wt, false, s?.aiTitle, s?.renamedTitle))
+            applyTitle(title)
+            return
+        }
+        when {
+            s?.renamedTitle != null && s.renamedTitle != e.renamed ->
+                store.put(sid, e.copy(title = s.renamedTitle, renamed = s.renamedTitle))
+            e.renamed == null && s?.aiTitle != null && s.aiTitle != e.aiTitle ->
+                store.put(sid, e.copy(title = s.aiTitle, aiTitle = s.aiTitle))
+        }
+        applyTitle(store.get(sid)!!.title)
+    }
+
+    private fun noteWorktree(wt: String) {
+        val first = knownWorktree == null
+        knownWorktree = wt
+        val sid = file.sessionId ?: return
+        val e = com.clauditor.services.TitleStore.get(sid)
+        if (e == null) {
+            if (first) syncTitle(ClaudeSessionService.getInstance(project).getSessions().find { it.sessionId == sid })
+            return
+        }
+        if (e.worktree == wt) return
+        com.clauditor.services.TitleStore.put(sid, e.copy(worktree = wt))
+        retitleEvent()
+    }
+
+    private fun noteWorkStarted() {
+        val sid = file.sessionId ?: return
+        val e = com.clauditor.services.TitleStore.get(sid) ?: return
+        if (e.workStarted) return
+        com.clauditor.services.TitleStore.put(sid, e.copy(workStarted = true))
+        retitleEvent()
+    }
+
+    /** Retitle from the summary: now if it is fresh (written in the last 2 minutes), else at its next write. */
+    private fun retitleEvent() {
+        val e = file.sessionId?.let { com.clauditor.services.TitleStore.get(it) } ?: return
+        if (e.renamed != null) return
+        retitlePendingSince = System.currentTimeMillis()
+        if (summaryGist.isNotEmpty() && retitlePendingSince - summaryMtime < 120_000) pinGist()
+    }
+
+    private fun pinGist() {
+        retitlePendingSince = 0
+        val sid = file.sessionId ?: return
+        val e = com.clauditor.services.TitleStore.get(sid) ?: return
+        if (summaryGist.isEmpty() || e.renamed != null) return
+        com.clauditor.services.TitleStore.put(sid, e.copy(title = summaryGist))
+        applyTitle(summaryGist)
+        ClaudeSessionService.getInstance(project).refresh()  // the list row shows the pinned title too
+    }
+
     /** ~/.claude/statusline-cache/<session>.summary: line 1 the gist, line 2 what to test. Re-read on mtime change. */
     private fun refreshSummary() {
         val sid = file.sessionId ?: return
@@ -1526,6 +1612,7 @@ class ClaudeSessionEditor(
         summaryMtime = mtime
         val lines = try { f.readLines().map { it.trim() } } catch (_: Exception) { return }
         summaryGist = lines.getOrNull(0).orEmpty()
+        if (retitlePendingSince > 0 && mtime > retitlePendingSince) pinGist()
         summaryTest = lines.getOrNull(1).orEmpty()
         summaryLabel.toolTipText = listOf(summaryGist, summaryTest).filter { it.isNotEmpty() }.joinToString(" - ")
         renderSummary()
