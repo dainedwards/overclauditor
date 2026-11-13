@@ -108,9 +108,13 @@ class ClaudeSessionEditor(
     /** Session gist + what to test, from the status-line script's Haiku summary cache. */
     private var summaryGist = ""
     private var summaryTest = ""
+    private val summaryBaseFont = JBUI.Fonts.label()
     private val summaryLabel: JBLabel = JBLabel("").apply {
         border = JBUI.Borders.empty(0, 8)
         minimumSize = java.awt.Dimension(0, 0)
+        // Never ask for height: the row stays as tall as the buttons, and long text wraps
+        // into it at a smaller size instead of growing the bar.
+        preferredSize = java.awt.Dimension(JBUI.scale(40), 1)
         addComponentListener(object : java.awt.event.ComponentAdapter() {
             override fun componentResized(e: java.awt.event.ComponentEvent) = renderSummary()
         })
@@ -318,11 +322,11 @@ class ClaudeSessionEditor(
             }
         }
 
-        val onUnresponsive: () -> Unit = {
-            file.isUnresponsive = true
+        val onUnresponsive: (Boolean) -> Unit = { hung ->
+            file.isUnresponsive = hung
             reconnectButton?.let {
-                it.toolTipText = "Session unresponsive — click to reconnect"
-                it.icon = AllIcons.General.Error
+                it.toolTipText = if (hung) "Session unresponsive — click to reconnect" else "Reconnect — close and resume this session"
+                it.icon = if (hung) AllIcons.General.Error else AllIcons.Actions.Refresh
             }
             refreshTabTitle()
         }
@@ -600,9 +604,13 @@ class ClaudeSessionEditor(
                         branchName.text = branch
                         branchName.foreground = if (branch == "main" || branch == "master") COLOR_ORANGE else COLOR_GREEN
                         statsLabel.text = when {
-                            changed == 0 -> "clean"
-                            bySession > 0 -> "$changed changed ($bySession by session)"
-                            else -> "$changed file${if (changed > 1) "s" else ""} changed"
+                            changed == 0 -> "✓"
+                            bySession > 0 -> "✎$changed ($bySession)"
+                            else -> "✎$changed"
+                        }
+                        statsLabel.toolTipText = when {
+                            changed == 0 -> "No uncommitted changes"
+                            else -> "$changed changed files, $bySession from this session"
                         }
                         statsLabel.foreground = if (changed > 0) COLOR_YELLOW else UIManager.getColor("Label.disabledForeground")
                     }
@@ -1479,24 +1487,70 @@ class ClaudeSessionEditor(
         renderSummary()
     }
 
-    /** One line, "gist - test", cut with … to the space the toolbar leaves so the bar never grows. */
+    /**
+     * "gist - test" in the space the toolbar leaves. One line at the normal size when it fits;
+     * otherwise two wrapped lines at the largest smaller size where both fit the row's height;
+     * only past the smallest size is the second line cut with an ellipsis.
+     */
     private fun renderSummary() {
-        var gist = summaryGist
-        var test = summaryTest
-        val avail = summaryLabel.width - summaryLabel.insets.left - summaryLabel.insets.right
-        val fm = summaryLabel.getFontMetrics(summaryLabel.font.deriveFont(java.awt.Font.BOLD))
-        fun line() = listOf(gist, test).filter { it.isNotEmpty() }.joinToString(" - ")
-        if (avail > 0) {
-            while (test.length > 2 && fm.stringWidth(line()) > avail) test = test.dropLast(2).trimEnd() + "…"
-            if (test.length <= 2 && fm.stringWidth(line()) > avail) test = ""
-            while (gist.length > 2 && fm.stringWidth(line()) > avail) gist = gist.dropLast(2).trimEnd() + "…"
+        data class Word(val text: String, val color: String?, val bold: Boolean)
+        val words = mutableListOf<Word>()
+        summaryGist.split(' ').filter { it.isNotEmpty() }.forEach { words += Word(it, "#2AA198", false) }
+        if (summaryGist.isNotEmpty() && summaryTest.isNotEmpty()) words += Word("-", null, false)
+        summaryTest.split(' ').filter { it.isNotEmpty() }.forEach { words += Word(it, "#5FD7FF", true) }
+        if (words.isEmpty()) { summaryLabel.text = ""; return }
+
+        val availW = summaryLabel.width - summaryLabel.insets.left - summaryLabel.insets.right
+        val availH = summaryLabel.height
+        fun metrics(size: Float, bold: Boolean) =
+            summaryLabel.getFontMetrics(summaryBaseFont.deriveFont(if (bold) java.awt.Font.BOLD else java.awt.Font.PLAIN, size))
+        fun width(w: Word, size: Float) = metrics(size, w.bold).stringWidth(w.text)
+        fun wrap(size: Float): List<List<Word>> {
+            val space = metrics(size, false).stringWidth(" ")
+            val lines = mutableListOf(mutableListOf<Word>())
+            var x = 0
+            for (w in words) {
+                val ww = width(w, size)
+                if (lines.last().isNotEmpty() && x + space + ww > availW) { lines += mutableListOf<Word>(); x = 0 }
+                x += (if (lines.last().isEmpty()) 0 else space) + ww
+                lines.last() += w
+            }
+            return lines
         }
+
+        val base = summaryBaseFont.size2D
+        var size = base
+        var lines: List<List<Word>> = listOf(words)
+        if (availW > 0) {
+            lines = wrap(base)
+            if (lines.size > 1) {
+                size = MIN_SUMMARY_FONT
+                var s = base - 1f
+                while (s >= MIN_SUMMARY_FONT) {
+                    val l = wrap(s)
+                    if (l.size <= 2 && (availH <= 0 || 2 * metrics(s, true).height <= availH)) { size = s; lines = l; break }
+                    s -= 1f
+                }
+                if (size == MIN_SUMMARY_FONT) lines = wrap(size)
+                if (lines.size > 2) {
+                    // Still too long at the smallest size: keep two lines, end the second with …
+                    val second = lines[1].toMutableList()
+                    val dots = metrics(size, true).stringWidth("…")
+                    val space = metrics(size, false).stringWidth(" ")
+                    while (second.size > 1 && second.sumOf { width(it, size) + space } + dots > availW) second.removeAt(second.lastIndex)
+                    second[second.lastIndex] = second.last().let { it.copy(text = it.text + "…") }
+                    lines = listOf(lines[0], second)
+                }
+            }
+        }
+
         fun esc(t: String) = com.intellij.openapi.util.text.StringUtil.escapeXmlEntities(t)
-        summaryLabel.text = if (gist.isEmpty() && test.isEmpty()) "" else "<html><nobr>" +
-            (if (gist.isNotEmpty()) "<span style='color:#2AA198'>${esc(gist)}</span>" else "") +
-            (if (gist.isNotEmpty() && test.isNotEmpty()) " - " else "") +
-            (if (test.isNotEmpty()) "<span style='color:#5FD7FF'><b>${esc(test)}</b></span>" else "") +
-            "</nobr></html>"
+        fun html(w: Word): String {
+            val t = if (w.bold) "<b>${esc(w.text)}</b>" else esc(w.text)
+            return if (w.color != null) "<span style='color:${w.color}'>$t</span>" else t
+        }
+        summaryLabel.font = summaryBaseFont.deriveFont(size)
+        summaryLabel.text = "<html><nobr>" + lines.joinToString("<br>") { l -> l.joinToString(" ") { html(it) } } + "</nobr></html>"
     }
 
     private fun paintCacheBar() {
@@ -1665,6 +1719,8 @@ class ClaudeSessionEditor(
             val f = frac.coerceIn(0.0, 1.0).toFloat()
             return Color.getHSBColor((1f - f) * 120f / 360f, 0.70f, 0.85f)
         }
+
+        private const val MIN_SUMMARY_FONT = 9f
 
         private val COLOR_GREEN = Color(0x5B, 0xA8, 0x5B)
         private val COLOR_YELLOW = Color(0xD4, 0xA0, 0x1E)

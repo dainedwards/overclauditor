@@ -30,7 +30,8 @@ class ActivityMonitoringTtyConnector(
     private val echoTimeoutMs: Long = 3000,
     private val onActiveChanged: (active: Boolean) -> Unit,
     private val onUserInput: (() -> Unit)? = null,
-    private val onUnresponsive: (() -> Unit)? = null
+    /** true when keystrokes stop being echoed, false once output resumes. */
+    private val onUnresponsive: ((Boolean) -> Unit)? = null
 ) : FilteringPtyConnector(process, charset) {
 
     private val log = Logger.getInstance(ActivityMonitoringTtyConnector::class.java)
@@ -45,6 +46,7 @@ class ActivityMonitoringTtyConnector(
     @Volatile private var readThreadName: String? = null
     @Volatile private var readBlocked = false
     @Volatile private var unresponsiveNotified = false
+    private val createdMs = System.currentTimeMillis()
     private var idleFuture: ScheduledFuture<*>? = null
     private var echoCheckFuture: ScheduledFuture<*>? = null
 
@@ -60,6 +62,9 @@ class ActivityMonitoringTtyConnector(
             totalReadChars += count
             if (unresponsiveNotified) {
                 unresponsiveNotified = false
+                // Output is flowing again: clear the warning. Before, only an idle-to-active
+                // edge cleared it, so a session already marked active kept the icon for good.
+                onUnresponsive?.let { cb -> ApplicationManager.getApplication().invokeLater { cb(false) } }
             }
             if (System.currentTimeMillis() - lastWriteMs > echoWindowMs) {
                 if (!active) {
@@ -93,11 +98,14 @@ class ActivityMonitoringTtyConnector(
         lastWriteMs = System.currentTimeMillis()
         unresponsiveNotified = false
         echoCheckFuture?.cancel(false)
+        // A resume replays a long transcript before the TUI answers keys; anything typed (or
+        // sent by the plugin) in that window isn't echoed and isn't a hang.
+        if (lastWriteMs - createdMs < STARTUP_GRACE_MS) return
         echoCheckFuture = AppExecutorUtil.getAppScheduledExecutorService().schedule({
             if (!unresponsiveNotified && lastReadMs < lastWriteMs) {
                 unresponsiveNotified = true
                 logUnresponsiveDiagnostics()
-                onUnresponsive?.let { cb -> ApplicationManager.getApplication().invokeLater(cb) }
+                onUnresponsive?.let { cb -> ApplicationManager.getApplication().invokeLater { cb(true) } }
             }
         }, echoTimeoutMs, TimeUnit.MILLISECONDS)
     }
@@ -141,5 +149,9 @@ class ActivityMonitoringTtyConnector(
         idleFuture?.cancel(false)
         echoCheckFuture?.cancel(false)
         super.close()
+    }
+
+    private companion object {
+        const val STARTUP_GRACE_MS = 20_000L
     }
 }

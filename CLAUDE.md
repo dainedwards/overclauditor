@@ -3,6 +3,9 @@
 Fork of Clauditor (bdkent/clauditor, remote `upstream`) with the owner's changes; plugin id
 `com.overclauditor`. Package names stay `com.clauditor` (internal only).
 
+- **First thing in a session: run `tools/upstream-check.sh`.** It checks once a day and is
+  silent otherwise. If it lists commits, follow `docs/upstream-updates.md` before other work.
+
 - **Ship every change with `tools/publish-local.sh`**: bumps `-oc.N`, builds, writes
   `~/.overclauditor/repo/updatePlugins.xml`, commits the bump. Rider polls that file (custom
   plugin repository) and auto-updates; then `git push`.

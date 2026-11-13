@@ -31,7 +31,7 @@ class ClaudeTerminalService(private val project: Project) {
         notifyFile: Path? = null,
         onActiveChanged: ((Boolean) -> Unit)? = null,
         onUserInput: (() -> Unit)? = null,
-        onUnresponsive: (() -> Unit)? = null
+        onUnresponsive: ((Boolean) -> Unit)? = null
     ): TerminalSession {
         return createWidget(
             arrayOf("claude", "--resume", sessionId),
@@ -47,7 +47,7 @@ class ClaudeTerminalService(private val project: Project) {
         notifyFile: Path? = null,
         onActiveChanged: ((Boolean) -> Unit)? = null,
         onUserInput: (() -> Unit)? = null,
-        onUnresponsive: (() -> Unit)? = null
+        onUnresponsive: ((Boolean) -> Unit)? = null
     ): TerminalSession {
         return createWidget(
             arrayOf("claude", "--resume", forkFromSessionId, "--fork-session"),
@@ -62,7 +62,7 @@ class ClaudeTerminalService(private val project: Project) {
         notifyFile: Path? = null,
         onActiveChanged: ((Boolean) -> Unit)? = null,
         onUserInput: (() -> Unit)? = null,
-        onUnresponsive: (() -> Unit)? = null
+        onUnresponsive: ((Boolean) -> Unit)? = null
     ): TerminalSession {
         return createWidget(
             arrayOf("claude", "--worktree", worktreeName, "--name", worktreeName),
@@ -78,7 +78,7 @@ class ClaudeTerminalService(private val project: Project) {
         notifyFile: Path? = null,
         onActiveChanged: ((Boolean) -> Unit)? = null,
         onUserInput: (() -> Unit)? = null,
-        onUnresponsive: (() -> Unit)? = null
+        onUnresponsive: ((Boolean) -> Unit)? = null
     ): TerminalSession {
         return createWidget(arrayOf("claude"), parent, workingDir = workingDir, statusFile = statusFile, notifyFile = notifyFile,
             onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
@@ -93,7 +93,7 @@ class ClaudeTerminalService(private val project: Project) {
         onReady: ((PtyProcess) -> Unit)? = null,
         onActiveChanged: ((Boolean) -> Unit)? = null,
         onUserInput: (() -> Unit)? = null,
-        onUnresponsive: (() -> Unit)? = null
+        onUnresponsive: ((Boolean) -> Unit)? = null
     ): TerminalSession {
         val env = com.clauditor.util.ProcessHelper.augmentedEnv()
         env["TERM"] = "xterm-256color"
