@@ -22,10 +22,9 @@ import java.nio.file.Path
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 
-@Service(Service.Level.PROJECT)
-
 private val SYSTEM_WRAPPER = Regex("^<(local-command-[a-z-]+|command-[a-z-]+|system-reminder|bash-[a-z-]+|task-notification)>")
 
+@Service(Service.Level.PROJECT)
 class ClaudeSessionService(private val project: Project) : Disposable {
 
     private val gson = Gson()
