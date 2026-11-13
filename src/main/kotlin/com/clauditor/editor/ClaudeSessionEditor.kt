@@ -382,7 +382,8 @@ class ClaudeSessionEditor(
         val topPanel = JPanel().apply {
             layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS)
             add(toolbar)
-            if (file.isWorktreeSession) add(createWorktreeToolbar())
+            // Clauditor's worktree bar (Commit / Update-by-rebase / Merge / Open in IDE) is left
+            // out: /merge, /push and /pull on the main row do those jobs with build + import.
         }
 
         val contentPanel = JPanel(BorderLayout())
