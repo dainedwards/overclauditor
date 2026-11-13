@@ -120,8 +120,7 @@ class ClaudeSessionsToolWindowFactory : ToolWindowFactory, DumbAware {
     }
 
     private fun openNewSession(project: Project, name: String) {
-        val file = ClaudeSessionVirtualFile(name)
-        FileEditorManager.getInstance(project).openFile(file, true)
+        com.clauditor.editor.openNewClaudeSession(project)
     }
 
     private fun openNewWorktreeSession(project: Project, worktreeName: String) {

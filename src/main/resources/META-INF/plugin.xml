@@ -151,5 +151,12 @@
             id="com.clauditor.settings.ClauditorSettingsConfigurable"
             displayName="Overclauditor"
         />
+        <postStartupActivity implementation="com.clauditor.editor.TabBarNewSessionActivity"/>
     </extensions>
+
+    <actions>
+        <action id="Overclauditor.NewSession" class="com.clauditor.editor.NewClaudeSessionAction">
+            <add-to-group group-id="EditorTabPopupMenu" anchor="first"/>
+        </action>
+    </actions>
 </idea-plugin>
