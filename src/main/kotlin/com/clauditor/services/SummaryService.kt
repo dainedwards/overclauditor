@@ -58,6 +58,9 @@ object SummaryService {
                 if (proc.exitValue() != 0) return@submit
                 val lines = out.lines().map { it.trim().replace("\\", "") }.filter { it.isNotEmpty() }
                 if (lines.isEmpty()) return@submit
+                // A run that couldn't summarize answers in a sentence: save nothing, and don't retry
+                // until the prompts change.
+                if (!com.clauditor.editor.ClaudeSessionEditor.isTitleShaped(lines[0])) { Files.writeString(hashFile, hash); return@submit }
                 Files.writeString(summaryFile(sessionId), lines.take(2).joinToString("\n") + "\n")
                 Files.writeString(hashFile, hash)
             } catch (e: Exception) {

@@ -21,3 +21,13 @@ class ErrorTextTest {
         assertFalse(ClaudeSessionEditor.looksLikeError("Checkout flow redesign"))
     }
 }
+
+class TitleShapeTest {
+    @Test fun summarizerSentenceIsNoTitle() = org.junit.Assert.assertTrue(ClaudeSessionEditor.unfitTitle(
+        "Cannot build the status line: the six message images and the most recent request image did not come through as readable content, and the working directory (`/Users/x/.claude/statusline-cache/agent`) is empty."))
+    @Test fun sentenceWithFullStop() = org.junit.Assert.assertTrue(ClaudeSessionEditor.unfitTitle("I need more context to summarize this."))
+    @Test fun realGistsPass() {
+        for (t in listOf("Brood egg and bountyhunter texture audit", "Tripo texture fixes for models", "Overclauditor button fixes"))
+            org.junit.Assert.assertFalse(t, ClaudeSessionEditor.unfitTitle(t))
+    }
+}

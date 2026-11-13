@@ -39,6 +39,10 @@ Clauditor 0.7.30 (https://github.com/bdkent/clauditor).
 - The Commit button is gone; caches moved to the IDE system folder and are removed on uninstall.
 
 ### Fixed
+- A summary that came back as a sentence ("Cannot build the status line: the images did not
+  come through...") could become the tab title. Titles must now be title-shaped (48 characters,
+  8 words, no colon, code, path or closing full stop); a bad pinned title is repaired on load, and
+  neither the built-in summarizer nor the summary bar keeps such an answer.
 - Command buttons and the model/effort dropdowns no longer submit a half-typed prompt along
   with the command: a draft in the input box is stashed first (Claude Code's ctrl+s) and comes
   back once the command has run. The `plan` button now actually enters plan mode with a draft

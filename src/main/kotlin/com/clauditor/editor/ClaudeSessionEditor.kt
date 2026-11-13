@@ -1638,8 +1638,8 @@ class ClaudeSessionEditor(
         val store = com.clauditor.services.TitleStore
         val e = store.get(sid)
         if (e == null) {
-            val title = s?.renamedTitle ?: s?.aiTitle?.takeUnless(::looksLikeError) ?: s?.name?.takeUnless(::looksLikeError)
-                ?: summaryGist.ifEmpty { null } ?: s?.firstPrompt ?: return
+            val title = s?.renamedTitle ?: s?.aiTitle?.takeUnless(::unfitTitle) ?: s?.name?.takeUnless(::unfitTitle)
+                ?: summaryGist.takeUnless(::unfitTitle) ?: s?.firstPrompt ?: return
             val wt = knownWorktree
             if (wt == null) { applyTitle(title); return }  // pin once the worktree is known
             store.put(sid, com.clauditor.services.TitleStore.Entry(title, wt, false, s?.aiTitle, s?.renamedTitle))
@@ -1647,9 +1647,15 @@ class ClaudeSessionEditor(
             return
         }
         when {
+            // A title pinned before the shape check (a summary that came back as a sentence): repair it.
+            e.renamed == null && unfitTitle(e.title) -> {
+                val fix = s?.aiTitle?.takeUnless(::unfitTitle) ?: summaryGist.takeUnless(::unfitTitle)
+                    ?: s?.firstPrompt?.let { com.clauditor.model.shortTitle(it) }?.takeUnless(::unfitTitle)
+                if (fix != null) store.put(sid, e.copy(title = fix))
+            }
             s?.renamedTitle != null && s.renamedTitle != e.renamed ->
                 store.put(sid, e.copy(title = s.renamedTitle, renamed = s.renamedTitle))
-            e.renamed == null && s?.aiTitle != null && s.aiTitle != e.aiTitle && !looksLikeError(s.aiTitle) ->
+            e.renamed == null && s?.aiTitle != null && s.aiTitle != e.aiTitle && !unfitTitle(s.aiTitle) ->
                 store.put(sid, e.copy(title = s.aiTitle, aiTitle = s.aiTitle))
         }
         applyTitle(store.get(sid)!!.title)
@@ -1689,7 +1695,7 @@ class ClaudeSessionEditor(
         retitlePendingSince = 0
         val sid = file.sessionId ?: return
         val e = com.clauditor.services.TitleStore.get(sid) ?: return
-        if (summaryGist.isEmpty() || e.renamed != null || looksLikeError(summaryGist)) return
+        if (summaryGist.isEmpty() || e.renamed != null || unfitTitle(summaryGist)) return
         com.clauditor.services.TitleStore.put(sid, e.copy(title = summaryGist))
         applyTitle(summaryGist)
         ClaudeSessionService.getInstance(project).refresh()  // the list row shows the pinned title too
@@ -1715,6 +1721,8 @@ class ClaudeSessionEditor(
         // A failed summarizer run (logged out, rate limited) can leave its error text in the file:
         // never show it, and never let it become a tab title.
         if (lines.any(::isCliErrorOutput)) return
+        // A summarizer that couldn't do the job answers in a sentence, not a gist: show nothing.
+        if (lines.getOrNull(0)?.let(::isTitleShaped) == false) return
         summaryGist = lines.getOrNull(0).orEmpty()
         summaryTest = lines.getOrNull(1).orEmpty()
         if (retitlePendingSince > 0 && mtime > retitlePendingSince) pinGist()
@@ -1997,6 +2005,21 @@ class ClaudeSessionEditor(
 
         /** Titles are conservative: anything that reads like an error never becomes one. */
         internal fun looksLikeError(text: String): Boolean = ERROR_TEXT.containsMatchIn(text)
+
+        /**
+         * Whether [text] can't be a tab title: it reads like an error, or it isn't shaped like a
+         * title. A summarizer that couldn't do its job answers in a sentence ("Cannot build the
+         * status line: the images did not come through..."), and no word list catches every one;
+         * a title is short, has no colon, code or path, and doesn't end in a full stop.
+         */
+        internal fun unfitTitle(text: String): Boolean {
+            val t = text.trim()
+            return t.isEmpty() || looksLikeError(t) || !isTitleShaped(t)
+        }
+
+        internal fun isTitleShaped(t: String): Boolean =
+            t.length <= 48 && t.split(Regex("\\s+")).size <= 8 && t.none { it == ':' || it == '`' || it == '/' || it == '\\' } &&
+                !t.endsWith(".")
 
         private val CLI_ERROR = Regex(
             "(?i)(invalid api key|please run /login|not logged in|api error|authentication_error|" +
