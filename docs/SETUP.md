@@ -27,7 +27,7 @@ An agent can do every step except the IDE clicks; ask the user for those.
 ## 3. Configure: `~/.overclauditor/config.json`
 
 Optional. Without it you get: `plan` `merge` `push` `pull` buttons (the last three are the bundled
-`/overclauditor:*` commands), the built-in summary, and the user's status line shown as usual. Read live; edits apply to tabs opened afterwards (buttons, status line) or
+`/overclauditor:*` commands) and a copy button, the built-in summary, and the user's status line shown as usual. Read live; edits apply to tabs opened afterwards (buttons, status line) or
 within seconds (summary).
 
 ```json
@@ -48,6 +48,8 @@ within seconds (summary).
     button (after Messages): any `AllIcons` name as `Group.Name`, e.g. `Actions.Copy`,
     `Actions.Execute`, `General.Settings`. `"badge": "*"` adds a short mark to the icon's
     corner, to tell two similar icons apart (e.g. run vs run-this-worktree).
+  - `"action": "copyLastCodeBlock"` (instead of `send`/`keys`) copies the last code block of
+    Claude's latest reply, or the whole reply if it has none. It's in the defaults as a copy icon.
   - `send` types text into the session; a value starting with `/` is a slash command and gets
     Enter appended. `keys` sends key chords instead: `ctrl+<letter>`, `enter`, `esc`, `tab`,
     space-separated for a sequence. Bind a chord to a command in

@@ -37,6 +37,12 @@ class OverclauditorConfigTest {
     }
 
     @Test
+    fun `the built-in copy action needs nothing to send`() {
+        val c = parse("""{"buttons":[{"icon":"Actions.Copy","action":"copyLastCodeBlock"}]}""")
+        assertEquals(OverclauditorConfig.COPY_LAST_CODE_BLOCK, c.buttons.single().builtin)
+    }
+
+    @Test
     fun `special keys`() {
         assertEquals("\r\u001b\t", OverclauditorConfig.keysToBytes("enter esc tab"))
     }
@@ -57,7 +63,8 @@ class OverclauditorConfigTest {
     @Test
     fun `defaults for an empty config`() {
         val c = parse("{}")
-        assertEquals(listOf("/plan\r", "/overclauditor:merge\r", "/overclauditor:push\r", "/overclauditor:pull\r"), c.buttons.map { it.send })
+        assertEquals(listOf("/plan\r", "/overclauditor:merge\r", "/overclauditor:push\r", "/overclauditor:pull\r"), c.buttons.filter { it.builtin == null }.map { it.send })
+        assertEquals(OverclauditorConfig.COPY_LAST_CODE_BLOCK, c.buttons.last().builtin)
         assertTrue(c.bundledCommands)
         assertEquals(OverclauditorConfig.SummarySource.BUILTIN, c.summarySource)
         assertNull(c.summaryFile)

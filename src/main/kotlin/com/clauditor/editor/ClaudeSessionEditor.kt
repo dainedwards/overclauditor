@@ -529,7 +529,7 @@ class ClaudeSessionEditor(
             javax.swing.JButton(b.label).apply {
                 isFocusable = false
                 toolTipText = b.tooltip
-                addActionListener { sendToTerminal(b.send) }
+                addActionListener { runButton(b) }
             }
         }
         // All the same width, sized to the longest label rather than the theme's 72px minimum.
@@ -560,7 +560,7 @@ class ClaudeSessionEditor(
             rightPanel.add(squareIcon(javax.swing.JButton(b.icon)).apply {
                 isFocusable = false
                 toolTipText = b.tooltip
-                addActionListener { sendToTerminal(b.send) }
+                addActionListener { runButton(b) }
             })
         }
 
@@ -1274,6 +1274,23 @@ class ClaudeSessionEditor(
         combo.maximumSize = size
         combo.revalidate()
         combo.parent?.let { it.revalidate(); it.repaint() }
+    }
+
+    private fun runButton(b: com.clauditor.services.OverclauditorConfig.Button) {
+        if (b.builtin != com.clauditor.services.OverclauditorConfig.COPY_LAST_CODE_BLOCK) { sendToTerminal(b.send); return }
+        val path = transcriptPath() ?: return
+        com.clauditor.util.ClauditorExecutor.submit {
+            val text = com.clauditor.util.LastReply.copyText(path)
+            ApplicationManager.getApplication().invokeLater {
+                if (text.isNullOrEmpty()) {
+                    showNotification("Nothing to copy yet", NotificationType.INFORMATION)
+                } else {
+                    com.intellij.openapi.ide.CopyPasteManager.getInstance().setContents(java.awt.datatransfer.StringSelection(text))
+                    val first = text.lineSequence().first { it.isNotBlank() }.trim().take(60)
+                    showNotification("Copied: $first", NotificationType.INFORMATION)
+                }
+            }
+        }
     }
 
     /** Last-wins read of a top-level key from user, project and project-local Claude settings. */

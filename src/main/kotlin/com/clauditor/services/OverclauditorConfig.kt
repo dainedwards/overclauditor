@@ -13,7 +13,13 @@ import javax.swing.Icon
  */
 object OverclauditorConfig {
     /** A toolbar button. Text buttons sit left of fork; icon buttons sit after Messages. */
-    data class Button(val label: String?, val icon: Icon?, val tooltip: String, val send: String)
+    /**
+     * [send] is typed into the session; [builtin] instead runs a plugin action:
+     * "copyLastCodeBlock" copies the last code block of Claude's latest reply (else the reply).
+     */
+    data class Button(val label: String?, val icon: Icon?, val tooltip: String, val send: String, val builtin: String? = null)
+
+    const val COPY_LAST_CODE_BLOCK = "copyLastCodeBlock"
 
     enum class SummarySource { BUILTIN, FILE, OFF }
 
@@ -48,7 +54,8 @@ object OverclauditorConfig {
             Button("plan", null, "Plan mode (/plan)", "/plan\r"),
             Button("merge", null, "Merge this worktree into main (/overclauditor:merge)", "/overclauditor:merge\r"),
             Button("push", null, "Merge into main, stay in the worktree (/overclauditor:push)", "/overclauditor:push\r"),
-            Button("pull", null, "Bring main into this worktree (/overclauditor:pull)", "/overclauditor:pull\r")
+            Button("pull", null, "Bring main into this worktree (/overclauditor:pull)", "/overclauditor:pull\r"),
+            Button(null, com.intellij.icons.AllIcons.Actions.Copy, "Copy the last code block of Claude's reply", "", COPY_LAST_CODE_BLOCK)
         ),
         summarySource = SummarySource.BUILTIN,
         summaryFile = null,
@@ -74,11 +81,12 @@ object OverclauditorConfig {
             val label = b.get("label")?.asString
             val icon = b.get("icon")?.asString?.let(::resolveIcon)
                 ?.let { base -> b.get("badge")?.asString?.takeIf { it.isNotBlank() }?.let { BadgeIcon(base, it.take(2)) } ?: base }
+            val builtin = b.get("action")?.asString?.takeIf { it == COPY_LAST_CODE_BLOCK }
             val send = b.get("send")?.asString?.let { if (it.startsWith("/")) "$it\r" else it }
                 ?: b.get("keys")?.asString?.let(::keysToBytes)
-                ?: return@mapNotNull null
+                ?: if (builtin != null) "" else return@mapNotNull null
             if (label == null && icon == null) return@mapNotNull null
-            Button(label, icon, b.get("tooltip")?.asString ?: (label ?: send.trim()), send)
+            Button(label, icon, b.get("tooltip")?.asString ?: (label ?: builtin ?: send.trim()), send, builtin)
         } ?: DEFAULT.buttons
         val summary = o.getAsJsonObject("summary")
         val source = when (summary?.get("source")?.asString?.lowercase()) {
