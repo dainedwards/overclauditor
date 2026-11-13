@@ -65,35 +65,7 @@ class ClaudeStatusService(private val project: Project) : Disposable {
     fun getWrapperScriptPath(): Path {
         wrapperScript?.let { if (Files.exists(it)) return it }
         val script = Files.createTempFile("clauditor-statusline-", ".sh")
-        Files.writeString(script, buildString {
-            appendLine("#!/bin/bash")
-            appendLine("input=\$(cat)")
-            appendLine("if [ -n \"\$CLAUDITOR_STATUS_FILE\" ]; then")
-            appendLine("  echo \"\$input\" > \"\${CLAUDITOR_STATUS_FILE}.\$\$\"")
-            appendLine("  mv \"\${CLAUDITOR_STATUS_FILE}.\$\$\" \"\$CLAUDITOR_STATUS_FILE\" 2>/dev/null")
-            appendLine("fi")
-            appendLine("if [ -n \"\$CLAUDITOR_ORIGINAL_STATUSLINE\" ]; then")
-            // Run through eval so the user's command is shell-parsed the way Claude
-            // itself runs it — honoring tilde, \$VARs, quotes, and pipes. A bare
-            // `\$CLAUDITOR_ORIGINAL_STATUSLINE` only word-splits/globs, which breaks
-            // any command using ~, \$HOME, quoted paths, or pipes.
-            // The user's status line shows as usual unless CLAUDITOR_HIDE_STATUSLINE=1 (config
-            // hideTerminalStatusLine), which still runs it for its side effects (caches,
-            // breadcrumbs) but prints nothing of it. Whenever nothing of the user's is shown
-            // (hidden, or they have none and this wrapper only exists to capture status), print
-            // an SGR reset: empty output leaves Claude Code holding a blank row under the
-            // prompt, while a zero-width escape collapses it.
-            appendLine("  if [ \"\$CLAUDITOR_HIDE_STATUSLINE\" = 1 ]; then")
-            appendLine("    echo \"\$input\" | eval \"\$CLAUDITOR_ORIGINAL_STATUSLINE\" >/dev/null 2>&1")
-            appendLine("    printf '\\033[0m'")
-            appendLine("  else")
-            appendLine("    echo \"\$input\" | eval \"\$CLAUDITOR_ORIGINAL_STATUSLINE\"")
-            appendLine("  fi")
-            appendLine("else")
-            appendLine("  printf '\\033[0m'")
-            appendLine("fi")
-            appendLine("exit 0")
-        })
+        Files.writeString(script, wrapperScriptText())
         script.toFile().setExecutable(true)
         wrapperScript = script
         return script
@@ -456,6 +428,37 @@ class ClaudeStatusService(private val project: Project) : Disposable {
     }
 
     companion object {
+        /** The status-line wrapper's text (tested directly by running it through bash). */
+        internal fun wrapperScriptText(): String = buildString {
+        appendLine("#!/bin/bash")
+        appendLine("input=\$(cat)")
+        appendLine("if [ -n \"\$CLAUDITOR_STATUS_FILE\" ]; then")
+        appendLine("  echo \"\$input\" > \"\${CLAUDITOR_STATUS_FILE}.\$\$\"")
+        appendLine("  mv \"\${CLAUDITOR_STATUS_FILE}.\$\$\" \"\$CLAUDITOR_STATUS_FILE\" 2>/dev/null")
+        appendLine("fi")
+        appendLine("if [ -n \"\$CLAUDITOR_ORIGINAL_STATUSLINE\" ]; then")
+        // Run through eval so the user's command is shell-parsed the way Claude
+        // itself runs it — honoring tilde, \$VARs, quotes, and pipes. A bare
+        // `\$CLAUDITOR_ORIGINAL_STATUSLINE` only word-splits/globs, which breaks
+        // any command using ~, \$HOME, quoted paths, or pipes.
+        // The user's status line shows as usual unless CLAUDITOR_HIDE_STATUSLINE=1 (config
+        // hideTerminalStatusLine), which still runs it for its side effects (caches,
+        // breadcrumbs) but prints nothing of it. Whenever nothing of the user's is shown
+        // (hidden, or they have none and this wrapper only exists to capture status), print
+        // an SGR reset: empty output leaves Claude Code holding a blank row under the
+        // prompt, while a zero-width escape collapses it.
+        appendLine("  if [ \"\$CLAUDITOR_HIDE_STATUSLINE\" = 1 ]; then")
+        appendLine("    echo \"\$input\" | eval \"\$CLAUDITOR_ORIGINAL_STATUSLINE\" >/dev/null 2>&1")
+        appendLine("    printf '\\033[0m'")
+        appendLine("  else")
+        appendLine("    echo \"\$input\" | eval \"\$CLAUDITOR_ORIGINAL_STATUSLINE\"")
+        appendLine("  fi")
+        appendLine("else")
+        appendLine("  printf '\\033[0m'")
+        appendLine("fi")
+        appendLine("exit 0")
+        }
+
         private const val GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/anthropics/claude-code/releases/latest"
         private const val INSTALLED_CHECK_INTERVAL_MS = 5 * 60 * 1000L  // 5 minutes
         private const val PUBLISHED_CHECK_INTERVAL_MS = 30 * 60 * 1000L // 30 minutes

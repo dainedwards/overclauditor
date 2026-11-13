@@ -58,6 +58,17 @@ intellijPlatform {
     }
 
     buildSearchableOptions = false
+
+    // ./gradlew verifyPlugin checks the built plugin against real IDE builds for missing,
+    // removed or internal APIs. -PverifyIde=<path to an installed IDE> verifies against that
+    // install (no download); otherwise the oldest supported build, downloaded.
+    pluginVerification {
+        ides {
+            val localIde = providers.gradleProperty("verifyIde").orNull
+            if (localIde != null) local(file(localIde))
+            else ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("platformVersion").get())
+        }
+    }
 }
 
 tasks {

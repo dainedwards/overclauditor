@@ -20,7 +20,7 @@ ver="$base-oc.$((n + 1))"
 sed -i.bak "s/^pluginVersion = .*/pluginVersion = $ver/" gradle.properties && rm -f gradle.properties.bak
 
 rm -rf build/distributions
-./gradlew buildPlugin -q
+./gradlew buildPlugin test -q   # a failing test stops the release
 zip="build/distributions/overclauditor-$ver.zip"
 [ -f "$zip" ] || { echo "build produced no $zip" >&2; exit 1; }
 

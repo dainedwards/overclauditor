@@ -19,7 +19,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - run: ./gradlew buildPlugin
+      - run: ./gradlew buildPlugin test
+
+      # Compatibility with the oldest supported IDE build (missing, removed or internal APIs)
+      - run: ./gradlew verifyPlugin
 
       - uses: actions/upload-artifact@v6
         with:

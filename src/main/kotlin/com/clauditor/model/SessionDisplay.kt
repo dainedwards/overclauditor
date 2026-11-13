@@ -36,7 +36,7 @@ fun shortTitle(title: String): String {
         if (out.isNotEmpty()) out.append(' ')
         out.append(w)
     }
-    if (out.isEmpty()) return title.take(TAB_MAX_CHARS)
+    if (out.isEmpty()) return title.trim().take(TAB_MAX_CHARS)
     if (out.length > TAB_MAX_CHARS) return out.take(TAB_MAX_CHARS - 1).toString() + "…"
     // Don't end on a dangling connective ("Recovering sessions after")
     val kept = out.toString().split(' ').toMutableList()

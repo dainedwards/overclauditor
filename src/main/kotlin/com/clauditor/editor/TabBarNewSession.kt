@@ -12,7 +12,7 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.ui.tabs.impl.JBTabsImpl
+import com.intellij.ui.tabs.JBTabs
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.JComponent
@@ -103,7 +103,7 @@ class TabBarNewSessionActivity : ProjectActivity {
 
     private fun install(project: Project) {
         for (window in FileEditorManagerEx.getInstanceEx(project).windows) {
-            val tabs = window.tabbedPane.tabs as? JBTabsImpl ?: continue
+            val tabs = window.tabbedPane.tabs as? JBTabs ?: continue
             val c: JComponent = tabs.component
             if (c.getClientProperty(INSTALLED) == true) continue
             c.putClientProperty(INSTALLED, true)

@@ -12,6 +12,10 @@ Fork of Clauditor (bdkent/clauditor, remote `upstream`) with the owner's changes
 - **Ship every change with `tools/publish-local.sh`**: bumps `-oc.N`, builds, writes
   `~/.overclauditor/repo/updatePlugins.xml`, commits the bump. Rider polls that file (custom
   plugin repository) and auto-updates; then `git push`.
+- **Tests:** `./gradlew test` (runs in every publish and in CI). `./gradlew verifyPlugin
+  -PverifyIde=/Applications/Rider.app` checks API compatibility against an installed IDE;
+  without the flag, against the oldest supported build (CI does that). No `@ApiStatus.Internal`
+  classes: the verifier lists them; find the public interface instead.
 - JDK 21: `~/Library/Java/JavaVirtualMachines/openjdk-21.0.2` (the script sets JAVA_HOME).
 - Push over SSH (`origin` is git@github.com): the `gh` token lacks `workflow` scope.
 - Never kill a test `claude` process mid-start: three kills turn Claude Code's fullscreen

@@ -67,7 +67,7 @@ object SummaryService {
     }
 
     /** The last few real user prompts, from the transcript's tail (meta lines and command wrappers skipped). */
-    private fun recentPrompts(transcript: Path): List<String> {
+    internal fun recentPrompts(transcript: Path): List<String> {
         val tail = try {
             RandomAccessFile(transcript.toFile(), "r").use { raf ->
                 val start = (raf.length() - TAIL_BYTES).coerceAtLeast(0)

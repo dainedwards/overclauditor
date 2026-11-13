@@ -47,7 +47,7 @@ object OverclauditorConfig {
         return cached
     }
 
-    private fun parse(o: JsonObject): Config {
+    internal fun parse(o: JsonObject): Config {
         val buttons = o.getAsJsonArray("buttons")?.mapNotNull { e ->
             val b = e.asJsonObject
             val label = b.get("label")?.asString
@@ -80,7 +80,7 @@ object OverclauditorConfig {
     } catch (_: Exception) { null }
 
     /** "ctrl+x ctrl+r" → the bytes a terminal sends for that chord sequence. */
-    private fun keysToBytes(keys: String): String = buildString {
+    internal fun keysToBytes(keys: String): String = buildString {
         for (stroke in keys.trim().split(Regex("\\s+"))) {
             val parts = stroke.lowercase().split('+')
             val key = parts.last()

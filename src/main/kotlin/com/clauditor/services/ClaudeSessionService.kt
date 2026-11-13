@@ -113,7 +113,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
     /** Set when a pass read new transcript bytes, so the index is only rewritten when it changed. */
     @Volatile private var indexDirty = false
 
-    private class SessionAccumulator {
+    internal class SessionAccumulator {
         val tail = com.clauditor.util.JsonlTailReader()
         var firstPrompt: String? = null
         /** A custom title written before the first prompt: `claude --name` at launch. */
@@ -431,94 +431,93 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         }
     }
 
-    /**
-     * Fold one transcript line into [acc]. Every update is order-independent or last-wins.
-     *
-     * Streams the line's top-level keys and skips every value it doesn't need, so the large
-     * ones (API request blobs, tool output, up to ~1 MB a line) are never built into a tree.
-     * The message body is only materialised while the first prompt is still unknown.
-     */
-    private fun applyLine(acc: SessionAccumulator, line: String) {
-        try {
-            val r = com.google.gson.stream.JsonReader(java.io.StringReader(line))
-            if (r.peek() != com.google.gson.stream.JsonToken.BEGIN_OBJECT) return
-            r.beginObject()
-            var type: String? = null
-            var instant: Instant? = null
-            var isMeta = false
-            var customTitle: String? = null
-            var aiTitle: String? = null
-            var gitBranch: String? = null
-            var message: JsonObject? = null
-            while (r.hasNext()) {
-                when (r.nextName()) {
-                    "type" -> type = r.stringOrSkip()
-                    "customTitle" -> customTitle = r.stringOrSkip()
-                    "aiTitle" -> aiTitle = r.stringOrSkip()
-                    "gitBranch" -> gitBranch = r.stringOrSkip()
-                    "isMeta" -> isMeta = if (r.peek() == com.google.gson.stream.JsonToken.BOOLEAN) r.nextBoolean() else { r.skipValue(); false }
-                    "timestamp" -> instant = when (r.peek()) {
-                        com.google.gson.stream.JsonToken.NUMBER -> Instant.ofEpochMilli(r.nextLong())
-                        com.google.gson.stream.JsonToken.STRING -> parseInstant(r.nextString())
-                        else -> { r.skipValue(); null }
-                    }
-                    "message" ->
-                        if (acc.firstPrompt == null && r.peek() == com.google.gson.stream.JsonToken.BEGIN_OBJECT)
-                            message = com.google.gson.JsonParser.parseReader(r).asJsonObject
-                        else r.skipValue()
-                    else -> r.skipValue()
-                }
-            }
-
-            if (type == "user" || type == "assistant") acc.messageCount++
-
-            // custom-title before the first prompt is the launch name (--name); after it, a /rename
-            if (type == "custom-title") {
-                if (acc.firstPrompt == null) acc.customTitle = customTitle else acc.renamedTitle = customTitle
-            }
-
-            // The CLI's own generated title; keep the last one
-            if (type == "ai-title") aiTitle?.takeIf { it.isNotBlank() }?.let { acc.aiTitle = it }
-
-            // First real user prompt (skip meta lines and <local-command-caveat>-style wrappers)
-            if (type == "user" && acc.firstPrompt == null && !isMeta) {
-                val content = message?.get("content")
-                acc.firstPrompt = when {
-                    content == null -> null
-                    content.isJsonPrimitive -> content.asString
-                    content.isJsonArray -> {
-                        content.asJsonArray
-                            .firstOrNull { it.isJsonObject && it.asJsonObject.get("type")?.asString == "text" }
-                            ?.asJsonObject?.get("text")?.asString
-                    }
-                    else -> null
-                }?.trim()?.takeUnless { it.isEmpty() || SYSTEM_WRAPPER.containsMatchIn(it) }
-                acc.gitBranch = gitBranch
-            }
-
-            if (instant != null && instant > acc.lastTimestamp) acc.lastTimestamp = instant
-        } catch (_: Exception) {
-            // Skip malformed lines
-        }
-    }
-
-    private fun com.google.gson.stream.JsonReader.stringOrSkip(): String? =
-        if (peek() == com.google.gson.stream.JsonToken.STRING) nextString() else { skipValue(); null }
-
-    private fun parseInstant(dateStr: String): Instant {
-        return try {
-            Instant.parse(dateStr)
-        } catch (_: Exception) {
-            Instant.EPOCH
-        }
-    }
-
-
     override fun dispose() {
         listeners.clear()
     }
 
     companion object {
+        /**
+         * Fold one transcript line into [acc]. Every update is order-independent or last-wins.
+         *
+         * Streams the line's top-level keys and skips every value it doesn't need, so the large
+         * ones (API request blobs, tool output, up to ~1 MB a line) are never built into a tree.
+         * The message body is only materialised while the first prompt is still unknown.
+         */
+        internal fun applyLine(acc: SessionAccumulator, line: String) {
+            try {
+                val r = com.google.gson.stream.JsonReader(java.io.StringReader(line))
+                if (r.peek() != com.google.gson.stream.JsonToken.BEGIN_OBJECT) return
+                r.beginObject()
+                var type: String? = null
+                var instant: Instant? = null
+                var isMeta = false
+                var customTitle: String? = null
+                var aiTitle: String? = null
+                var gitBranch: String? = null
+                var message: JsonObject? = null
+                while (r.hasNext()) {
+                    when (r.nextName()) {
+                        "type" -> type = r.stringOrSkip()
+                        "customTitle" -> customTitle = r.stringOrSkip()
+                        "aiTitle" -> aiTitle = r.stringOrSkip()
+                        "gitBranch" -> gitBranch = r.stringOrSkip()
+                        "isMeta" -> isMeta = if (r.peek() == com.google.gson.stream.JsonToken.BOOLEAN) r.nextBoolean() else { r.skipValue(); false }
+                        "timestamp" -> instant = when (r.peek()) {
+                            com.google.gson.stream.JsonToken.NUMBER -> Instant.ofEpochMilli(r.nextLong())
+                            com.google.gson.stream.JsonToken.STRING -> parseInstant(r.nextString())
+                            else -> { r.skipValue(); null }
+                        }
+                        "message" ->
+                            if (acc.firstPrompt == null && r.peek() == com.google.gson.stream.JsonToken.BEGIN_OBJECT)
+                                message = com.google.gson.JsonParser.parseReader(r).asJsonObject
+                            else r.skipValue()
+                        else -> r.skipValue()
+                    }
+                }
+
+                if (type == "user" || type == "assistant") acc.messageCount++
+
+                // custom-title before the first prompt is the launch name (--name); after it, a /rename
+                if (type == "custom-title") {
+                    if (acc.firstPrompt == null) acc.customTitle = customTitle else acc.renamedTitle = customTitle
+                }
+
+                // The CLI's own generated title; keep the last one
+                if (type == "ai-title") aiTitle?.takeIf { it.isNotBlank() }?.let { acc.aiTitle = it }
+
+                // First real user prompt (skip meta lines and <local-command-caveat>-style wrappers)
+                if (type == "user" && acc.firstPrompt == null && !isMeta) {
+                    val content = message?.get("content")
+                    acc.firstPrompt = when {
+                        content == null -> null
+                        content.isJsonPrimitive -> content.asString
+                        content.isJsonArray -> {
+                            content.asJsonArray
+                                .firstOrNull { it.isJsonObject && it.asJsonObject.get("type")?.asString == "text" }
+                                ?.asJsonObject?.get("text")?.asString
+                        }
+                        else -> null
+                    }?.trim()?.takeUnless { it.isEmpty() || SYSTEM_WRAPPER.containsMatchIn(it) }
+                    acc.gitBranch = gitBranch
+                }
+
+                if (instant != null && instant > acc.lastTimestamp) acc.lastTimestamp = instant
+            } catch (_: Exception) {
+                // Skip malformed lines
+            }
+        }
+
+        private fun com.google.gson.stream.JsonReader.stringOrSkip(): String? =
+            if (peek() == com.google.gson.stream.JsonToken.STRING) nextString() else { skipValue(); null }
+
+        internal fun parseInstant(dateStr: String): Instant {
+            return try {
+                Instant.parse(dateStr)
+            } catch (_: Exception) {
+                Instant.EPOCH
+            }
+        }
+
         /** Floor between `ps`-based external-session sweeps. */
         private const val EXTERNAL_SWEEP_MIN_MS = 4_000L
 
