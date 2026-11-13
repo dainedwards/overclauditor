@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="960" viewBox="0 0 1200 960" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="1200" height="960" rx="16" fill="#0d1117"/>
+
+  <!-- Header -->
+  <path d="M56 30 L40 58 L51 58 L44 82 L68 50 L56 50 L64 30 Z" fill="#FFC53D"/>
+  <text x="84" y="70" font-size="40" font-weight="700" fill="#e6edf3">Overclauditor</text>
+  <text x="84" y="100" font-size="17" fill="#8b949e">Clauditor, overclocked: Claude Code sessions as JetBrains editor tabs, with a toolbar that tells you everything at a glance</text>
+
+  <!-- Toolbar mock -->
+  <text x="40" y="140" font-size="13" font-weight="600" fill="#8b949e" letter-spacing="1">SESSION TOOLBAR</text>
+  <rect x="40" y="150" width="1120" height="52" rx="8" fill="#161b22" stroke="#30363d"/>
+  <rect x="52" y="160" width="104" height="32" rx="6" fill="#0d1117" stroke="#30363d"/>
+  <text x="62" y="181" font-size="14" font-weight="700" fill="#A86BD6">Opus 5.5 ▾</text>
+  <rect x="164" y="160" width="92" height="32" rx="6" fill="#0d1117" stroke="#30363d"/>
+  <text x="174" y="181" font-size="14" font-weight="700" fill="#4A90D9">medium ▾</text>
+  <text x="270" y="181" font-size="14" font-weight="700" fill="#5BA85B">⎇ hud-mockups</text>
+  <text x="392" y="181" font-size="14" fill="#D4A01E">✎4 (2)</text>
+  <text x="456" y="181" font-size="14" fill="#2AA198">HUD palette mockups</text>
+  <text x="604" y="181" font-size="14" fill="#8b949e">-</text>
+  <text x="616" y="181" font-size="14" font-weight="700" fill="#5FD7FF">palette swap, text contrast, hover states</text>
+  <g font-size="13" fill="#e6edf3">
+    <rect x="928" y="162" width="44" height="28" rx="6" fill="#21262d" stroke="#30363d"/><text x="937" y="181">plan</text>
+    <rect x="976" y="162" width="44" height="28" rx="6" fill="#21262d" stroke="#30363d"/><text x="980" y="181">merge</text>
+    <rect x="1024" y="162" width="44" height="28" rx="6" fill="#21262d" stroke="#30363d"/><text x="1033" y="181">push</text>
+    <rect x="1072" y="162" width="44" height="28" rx="6" fill="#21262d" stroke="#30363d"/><text x="1083" y="181">pull</text>
+  </g>
+  <path d="M1131 168 L1131 184 L1145 176 Z" fill="#5BA85B"/>
+  <g font-size="12" fill="#8b949e">
+    <text x="52" y="222">colour-coded model + effort, with versions</text>
+    <text x="300" y="222">worktree, changes</text>
+    <text x="456" y="222">summary: what the session is about - what to test</text>
+    <text x="928" y="222">your commands (config)</text>
+  </g>
+
+  <!-- Bottom bar mock -->
+  <text x="40" y="262" font-size="13" font-weight="600" fill="#8b949e" letter-spacing="1">BOTTOM BAR</text>
+  <rect x="40" y="272" width="1120" height="44" rx="8" fill="#161b22" stroke="#30363d"/>
+  <g font-size="12" font-weight="600">
+    <rect x="52" y="282" width="90" height="24" rx="12" fill="#30363d"/>
+    <text x="97" y="299" text-anchor="middle" fill="#e6edf3">5h —</text>
+    <rect x="150" y="282" width="90" height="24" rx="12" fill="#30363d"/>
+    <rect x="150" y="282" width="29" height="24" rx="12" fill="#A2D841"/>
+    <text x="195" y="299" text-anchor="middle" fill="#e6edf3">7d 32%</text>
+    <rect x="248" y="282" width="100" height="24" rx="12" fill="#30363d"/>
+    <rect x="248" y="282" width="41" height="24" rx="12" fill="#BDD841"/>
+    <text x="298" y="299" text-anchor="middle" fill="#e6edf3">Fable 41%</text>
+    <circle cx="366" cy="294" r="8" fill="none" stroke="#8b949e" stroke-width="1.6"/>
+    <path d="M366 289 L366 294 L370 296" stroke="#8b949e" stroke-width="1.6" fill="none"/>
+    <rect x="382" y="282" width="130" height="24" rx="12" fill="#30363d"/>
+    <rect x="382" y="282" width="102" height="24" rx="12" fill="#41D841"/>
+    <text x="447" y="299" text-anchor="middle" fill="#0d1117">Cache 47:12</text>
+    <rect x="520" y="282" width="628" height="24" rx="12" fill="#30363d"/>
+    <rect x="520" y="282" width="239" height="24" rx="12" fill="#8FD841"/>
+    <text x="834" y="299" text-anchor="middle" fill="#e6edf3">Context 38%</text>
+  </g>
+  <g font-size="12" fill="#8b949e">
+    <text x="52" y="336">plan limits from your account</text>
+    <text x="360" y="336">prompt-cache countdown</text>
+    <text x="520" y="336">context used; every bar ramps green to red</text>
+  </g>
+
+  <!-- Feature cards -->
+  <g font-size="14">
+    <g transform="translate(40,370)">
+      <rect width="360" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+      <text x="18" y="32" font-size="17" font-weight="700" fill="#e6edf3">Everything on one row</text>
+      <text x="18" y="58" fill="#8b949e">Model and effort dropdowns, branch, change</text>
+      <text x="18" y="78" fill="#8b949e">count, summary and buttons. Long text wraps</text>
+      <text x="18" y="98" fill="#8b949e">smaller instead of growing the bar.</text>
+    </g>
+    <g transform="translate(420,370)">
+      <rect width="360" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+      <text x="18" y="32" font-size="17" font-weight="700" fill="#e6edf3">Session summary</text>
+      <text x="18" y="58" fill="#8b949e">What the session is about and what to test,</text>
+      <text x="18" y="78" fill="#8b949e">from a small Haiku call when the prompts</text>
+      <text x="18" y="98" fill="#8b949e">change, or read from your own script.</text>
+    </g>
+    <g transform="translate(800,370)">
+      <rect width="360" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+      <text x="18" y="32" font-size="17" font-weight="700" fill="#e6edf3">Usage and cache bars</text>
+      <text x="18" y="58" fill="#8b949e">5-hour, weekly and per-model limits, and</text>
+      <text x="18" y="78" fill="#8b949e">the prompt-cache timer, so you know when</text>
+      <text x="18" y="98" fill="#8b949e">the next prompt re-reads everything.</text>
+    </g>
+    <g transform="translate(40,504)">
+      <rect width="360" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+      <text x="18" y="32" font-size="17" font-weight="700" fill="#e6edf3">Titles that stay put</text>
+      <text x="18" y="58" fill="#8b949e">Short, pinned tab titles. They change only</text>
+      <text x="18" y="78" fill="#8b949e">on a worktree switch, the first file edit,</text>
+      <text x="18" y="98" fill="#8b949e">/rename, or a new title from the CLI.</text>
+    </g>
+    <g transform="translate(420,504)">
+      <rect width="360" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+      <text x="18" y="32" font-size="17" font-weight="700" fill="#e6edf3">Your buttons</text>
+      <text x="18" y="58" fill="#8b949e">Slash commands and key chords from</text>
+      <text x="18" y="78" fill="#8b949e">~/.overclauditor/config.json, so an agent</text>
+      <text x="18" y="98" fill="#8b949e">can set it up for you. Default: /plan.</text>
+    </g>
+    <g transform="translate(800,504)">
+      <rect width="360" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+      <text x="18" y="32" font-size="17" font-weight="700" fill="#e6edf3">Fast with huge histories</text>
+      <text x="18" y="58" fill="#8b949e">Loads in the background: no more 26 s IDE</text>
+      <text x="18" y="78" fill="#8b949e">freeze. Streaming parse is 2x faster, and a</text>
+      <text x="18" y="98" fill="#8b949e">saved index means restarts read only what's new.</text>
+    </g>
+    <g transform="translate(40,638)">
+      <rect width="360" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+      <text x="18" y="32" font-size="17" font-weight="700" fill="#e6edf3">More room for the prompt</text>
+      <text x="18" y="58" fill="#8b949e">Removes the blank status-line row under</text>
+      <text x="18" y="78" fill="#8b949e">the input. Can hide your own status line</text>
+      <text x="18" y="98" fill="#8b949e">inside the plugin, if you want.</text>
+    </g>
+    <g transform="translate(420,638)">
+      <rect width="360" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+      <text x="18" y="32" font-size="17" font-weight="700" fill="#e6edf3">New session anywhere</text>
+      <text x="18" y="58" fill="#8b949e">Right-click or double-click the tab bar.</text>
+      <text x="18" y="78" fill="#8b949e">No name prompt; open tabs come back</text>
+      <text x="18" y="98" fill="#8b949e">when the IDE restarts.</text>
+    </g>
+    <g transform="translate(800,638)">
+      <rect width="360" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+      <text x="18" y="32" font-size="17" font-weight="700" fill="#e6edf3">Leaves nothing behind</text>
+      <text x="18" y="58" fill="#8b949e">Caches in the IDE's own folder, removed on</text>
+      <text x="18" y="78" fill="#8b949e">uninstall. Never edits your Claude settings;</text>
+      <text x="18" y="98" fill="#8b949e">summaries save no transcripts.</text>
+    </g>
+  </g>
+
+  <!-- Fixes -->
+  <text x="40" y="800" font-size="13" font-weight="600" fill="#8b949e" letter-spacing="1">FIXED FROM CLAUDITOR</text>
+  <g font-size="14" fill="#e6edf3">
+    <text x="40" y="830" fill="#5BA85B">✓</text><text x="60" y="830">Titles no longer show &lt;local-command-caveat&gt; or the raw first prompt</text>
+    <text x="40" y="856" fill="#5BA85B">✓</text><text x="60" y="856">Model dropdown no longer says Sonnet while you run Opus</text>
+    <text x="40" y="882" fill="#5BA85B">✓</text><text x="60" y="882">No false "session unresponsive" warning after a resume</text>
+    <text x="640" y="830" fill="#5BA85B">✓</text><text x="660" y="830">Effort is a dropdown, not a single "max" button</text>
+    <text x="640" y="856" fill="#5BA85B">✓</text><text x="660" y="856">Open tabs restore on restart, even with the pane closed</text>
+    <text x="640" y="882" fill="#5BA85B">✓</text><text x="660" y="882">Clauditor's worktree bar is optional (off by default)</text>
+  </g>
+
+  <text x="40" y="932" font-size="12" fill="#6e7681">MIT licensed. A fork of bdkent/clauditor, with thanks.</text>
+</svg>

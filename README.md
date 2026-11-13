@@ -1,8 +1,65 @@
 # Overclauditor
 
-A fork of [Clauditor](https://github.com/bdkent/clauditor) with a reworked session toolbar
-(model/effort dropdowns, session summary, configurable command buttons), usage and cache bars,
-pinned tab titles, and a faster session list. **Setup: [docs/SETUP.md](docs/SETUP.md).**
+**Clauditor, overclocked.** A JetBrains IDE plugin (IntelliJ IDEA, Rider, WebStorm, PyCharm and
+the rest, 2024.3+) that runs Claude Code sessions as editor tabs, with a toolbar and status bar
+that show everything about a session at a glance. A fork of
+[Clauditor](https://github.com/bdkent/clauditor) by bdkent.
+
+![Overclauditor features](docs/overclauditor-features.svg)
+
+**Install and configure: [docs/SETUP.md](docs/SETUP.md).** What changed from Clauditor:
+[CHANGELOG.md](CHANGELOG.md).
+
+## How it works
+
+- **Sessions are tabs.** Each tab runs the `claude` CLI in an embedded terminal. Open one from
+  the Sessions tool window, or right-click / double-click the editor tab bar for a new one.
+  Tabs that were open come back when the IDE restarts.
+- **Where the live data comes from.** Every session the plugin starts gets a temporary
+  `--settings` file that points Claude Code's status line at a tiny capture script. Claude
+  Code hands that script the session's state each turn (model, effort, context, prompt cache,
+  rate limits); the toolbar and bottom bar draw from it. Nothing is installed and your own
+  Claude settings are never edited. Plan usage (5-hour, weekly, per-model weekly) comes from
+  the same endpoint `/usage` reads, signed in with the CLI's own login.
+- **The session summary** ("what this session is about - what to test") is a two-line Haiku
+  summary made when your recent prompts change, or read from a file your own status-line
+  script writes (`summary` in the config).
+- **Tab titles are pinned.** A tab keeps its title until the session moves to another
+  worktree, first edits a file (a question turned into work), you `/rename` it, or Claude Code
+  writes a new title itself. Never on every prompt.
+- **The session list** is built in the background with a streaming parser, and a saved index
+  means each start only reads what was added since. Large histories (gigabytes of
+  transcripts) no longer freeze the IDE.
+- **Buttons** type into the session: a slash command, or key chords you have bound to commands
+  in `~/.claude/keybindings.json`. They come from `~/.overclauditor/config.json`.
+- **Cleanup.** Caches live in the IDE's own system folder and are deleted on uninstall; the
+  only file in your home folder is the config, if you write one.
+
+## The worktree workflow: plan, merge, push, pull
+
+The buttons send `/plan`, `/merge`, `/push` and `/pull`. `/plan` is built into Claude Code.
+The other three are **custom commands**: copy them from [examples/commands](examples/commands)
+into `~/.claude/commands/`, and [examples/git-merge-lock.sh](examples/git-merge-lock.sh) into
+`~/.claude/`, then add the buttons in your config. They assume each task runs in its own git
+worktree (Claude Code's `EnterWorktree`), with `main` as the shared checkout:
+
+| Command | Direction | What it does |
+|---|---|---|
+| `/plan` | | Puts the session in plan mode, or shows the current plan. |
+| `/pull` | main → worktree | Merges main into your worktree and builds, so you work on current code. Nothing goes back. |
+| `/merge` | worktree → main | Merges main into the worktree first and fixes conflicts there, then (under a lock, so parallel sessions don't collide) merges into main, pushes, builds main. The session leaves the worktree. |
+| `/push` | worktree → main, then back | `/merge`, then the session goes back into the same worktree to keep working. |
+
+The conflict work always happens in your worktree, never in the shared main checkout, and a
+failed `git push` never undoes a merge. Edit the "build" steps in the examples to your
+project's build command.
+
+## License
+
+MIT, as Clauditor is: see [LICENSE](LICENSE). Clauditor's copyright notice is kept; the
+Overclauditor changes are added under the same terms.
+
+---
 
 The original Clauditor README follows.
 
