@@ -37,7 +37,7 @@ dependencies {
 
 intellijPlatform {
     pluginConfiguration {
-        id = "com.clauditor"
+        id = "com.overclauditor"
         name = providers.gradleProperty("pluginName")
         version = providers.gradleProperty("pluginVersion")
 
