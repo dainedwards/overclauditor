@@ -34,5 +34,10 @@ private fun shorten(title: String): String {
     }
     if (out.isEmpty()) return title.take(TAB_MAX_CHARS)
     if (out.length > TAB_MAX_CHARS) return out.take(TAB_MAX_CHARS - 1).toString() + "…"
-    return out.toString().trimEnd(',', ':', ';', '-', '.')
+    // Don't end on a dangling connective ("Recovering sessions after")
+    val kept = out.toString().split(' ').toMutableList()
+    while (kept.size > 1 && kept.last().trimEnd(',', ':', ';', '-', '.').lowercase() in DANGLING) kept.removeAt(kept.lastIndex)
+    return kept.joinToString(" ").trimEnd(',', ':', ';', '-', '.')
 }
+
+private val DANGLING = setOf("a", "an", "the", "to", "of", "for", "and", "or", "with", "in", "on", "at", "by", "from", "after", "before", "into", "via", "vs")
