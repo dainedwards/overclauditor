@@ -23,6 +23,9 @@ import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 
 @Service(Service.Level.PROJECT)
+
+private val SYSTEM_WRAPPER = Regex("^<(local-command-[a-z-]+|command-[a-z-]+|system-reminder|bash-[a-z-]+|task-notification)>")
+
 class ClaudeSessionService(private val project: Project) : Disposable {
 
     private val gson = Gson()
@@ -48,6 +51,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         val tail = com.clauditor.util.JsonlTailReader()
         var firstPrompt: String? = null
         var customTitle: String? = null
+        var aiTitle: String? = null
         var messageCount = 0
         var gitBranch: String? = null
         var lastTimestamp: Instant = Instant.EPOCH
@@ -56,6 +60,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
         fun reset() {
             firstPrompt = null
             customTitle = null
+            aiTitle = null
             messageCount = 0
             gitBranch = null
             lastTimestamp = Instant.EPOCH
@@ -334,7 +339,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
 
             return SessionDisplay(
                 sessionId = sessionId,
-                name = acc.customTitle,
+                name = acc.customTitle ?: acc.aiTitle,
                 firstPrompt = firstPrompt,
                 messageCount = acc.messageCount,
                 modified = modified,
@@ -360,8 +365,13 @@ class ClaudeSessionService(private val project: Project) : Disposable {
                 acc.customTitle = obj.get("customTitle")?.asString
             }
 
-            // Extract first user prompt
-            if (type == "user" && acc.firstPrompt == null) {
+            // The CLI's own generated title; keep the last one
+            if (type == "ai-title") {
+                obj.get("aiTitle")?.asString?.takeIf { it.isNotBlank() }?.let { acc.aiTitle = it }
+            }
+
+            // Extract first real user prompt (skip meta lines and <local-command-caveat>-style wrappers)
+            if (type == "user" && acc.firstPrompt == null && obj.get("isMeta")?.asBoolean != true) {
                 val message = obj.getAsJsonObject("message")
                 val content = message?.get("content")
                 acc.firstPrompt = when {
@@ -373,7 +383,7 @@ class ClaudeSessionService(private val project: Project) : Disposable {
                             ?.asJsonObject?.get("text")?.asString
                     }
                     else -> null
-                }
+                }?.trim()?.takeUnless { it.isEmpty() || SYSTEM_WRAPPER.containsMatchIn(it) }
 
                 // Grab git branch from first user message
                 acc.gitBranch = obj.get("gitBranch")?.asString

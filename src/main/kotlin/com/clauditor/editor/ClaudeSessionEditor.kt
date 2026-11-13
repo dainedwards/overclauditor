@@ -74,7 +74,8 @@ class ClaudeSessionEditor(
     private var historyPanel: MessageHistoryPanel? = null
     private var historySplitter: JBSplitter? = null
     @Volatile private var lastTitle: String? = null
-    private var maxEffortButton: javax.swing.JButton? = null
+    /** cwd from the status line; differs from the launch dir once the session enters a worktree. */
+    @Volatile private var liveCwd: String? = null
     private var reconnectButton: javax.swing.JButton? = null
     private val contextProgress = JProgressBar(0, 100).apply {
         setUI(RoundedProgressBarUI())
@@ -85,6 +86,21 @@ class ClaudeSessionEditor(
         border = JBUI.Borders.empty(5, 3)
         foreground = COLOR_GREEN
     }
+    /** Prompt-cache countdown: time since the last API reply against the cache TTL it wrote. */
+    private val cacheProgress = JProgressBar(0, 1000).apply {
+        setUI(RoundedProgressBarUI())
+        isStringPainted = true
+        string = "Cache: —"
+        value = 0
+        isOpaque = false
+        border = JBUI.Borders.empty(5, 3)
+        foreground = COLOR_GREEN
+        preferredSize = java.awt.Dimension(JBUI.scale(150), preferredSize.height)
+        toolTipText = "Prompt cache: time left before the next prompt re-reads the whole context"
+    }
+    @Volatile private var lastReplyAt: java.time.Instant? = null
+    @Volatile private var cacheTtl: java.time.Duration = java.time.Duration.ofHours(1)
+    private val cacheScanInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
     private val effortLabel = JBLabel("").apply {
         border = JBUI.Borders.empty(0, 6)
         foreground = UIManager.getColor("Label.disabledForeground")
@@ -129,6 +145,14 @@ class ClaudeSessionEditor(
             add(costLabel)
             add(versionLabel)
         }
+        val cachePanel = JPanel().apply {
+            layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.X_AXIS)
+            isOpaque = false
+            add(JBLabel(AllIcons.Vcs.History).apply { border = JBUI.Borders.empty(0, 2, 0, 2); alignmentY = 0.5f })
+            cacheProgress.alignmentY = 0.5f
+            add(cacheProgress)
+        }
+        add(cachePanel, BorderLayout.WEST)
         add(contextProgress, BorderLayout.CENTER)
         add(rightPanel, BorderLayout.EAST)
         isVisible = false
@@ -281,7 +305,6 @@ class ClaudeSessionEditor(
                 statusService.clearNotifyState(file.sessionId ?: monitoringId)
                 refreshTabTitle()
             }
-            maxEffortButton?.let { if (!it.isEnabled) it.isEnabled = true }
         }
 
         val onUnresponsive: () -> Unit = {
@@ -319,8 +342,6 @@ class ClaudeSessionEditor(
             }
         }
 
-        // Toolbar
-        val toolbar = createToolbar()
 
         // Message history side panel
         historyPanel = MessageHistoryPanel(project, session.widget, { file.sessionId }, { file.workingDir }, sessionDisposable)
@@ -338,13 +359,14 @@ class ClaudeSessionEditor(
         val isGitRepo = file.isWorktreeSession ||
             (gitDir != null && java.io.File(gitDir, ".git").let { it.isDirectory || it.isFile })
 
+        // Resolve the git dir at use time: a new-worktree tab has no workingDir until session
+        // linking fills it in, and a session that enters a worktree reports its new cwd.
+        val toolbar = createToolbar(
+            if (isGitRepo) createGitToolbar { liveCwd ?: file.workingDir ?: project.basePath } else null
+        )
         val topPanel = JPanel().apply {
             layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS)
             add(toolbar)
-            // Resolve the git dir at use time: a new-worktree tab has no workingDir
-            // until session linking fills it in, at which point the toolbar should
-            // switch from the main repo to the worktree.
-            if (isGitRepo) add(createGitToolbar { file.workingDir ?: project.basePath })
             if (file.isWorktreeSession) add(createWorktreeToolbar())
         }
 
@@ -398,6 +420,7 @@ class ClaudeSessionEditor(
         }
         statusService.addStatusListener(statusListener)
         Disposer.register(sessionDisposable, Disposable { statusService.removeStatusListener(statusListener) })
+        startCacheTimer()
         // Deliver cached state immediately — otherwise a re-instantiated editor
         // stays invisible until the next distinct status update arrives.
         statusService.getStatus(monitoringId)?.let { statusListener(monitoringId, it) }
@@ -429,20 +452,14 @@ class ClaudeSessionEditor(
         }
     }
 
-    private fun createToolbar(): JComponent {
+    private fun createToolbar(gitPanel: JComponent?): JComponent {
         val leftPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 2))
 
         leftPanel.add(createModelDropdown())
 
-        maxEffortButton = javax.swing.JButton("max").apply {
-            toolTipText = "Send /effort max"
-            isFocusable = false
-            addActionListener {
-                sendToTerminal("/effort max\r")
-                isEnabled = false
-            }
-        }
-        leftPanel.add(maxEffortButton)
+        leftPanel.add(createEffortDropdown())
+
+        gitPanel?.let { leftPanel.add(it) }
 
         val forkButton = javax.swing.JButton(com.intellij.icons.AllIcons.Actions.Copy)
         forkButton.toolTipText = "Fork — open a new session branched from this one"
@@ -523,17 +540,19 @@ class ClaudeSessionEditor(
         }
         val branchName = JBLabel("").apply {
             border = JBUI.Borders.empty(0, 4)
-            foreground = UIManager.getColor("Label.disabledForeground")
+            font = font.deriveFont(java.awt.Font.BOLD)
         }
         val statsLabel = JBLabel("").apply {
             border = JBUI.Borders.empty(0, 4)
             foreground = UIManager.getColor("Label.disabledForeground")
         }
 
-        val commitButton = javax.swing.JButton("Commit").apply {
-            isFocusable = false
-            isEnabled = false
-            toolTipText = "No session changes to commit"
+        val slashButtons = SLASH_BUTTONS.map { cmd ->
+            javax.swing.JButton(cmd).apply {
+                isFocusable = false
+                toolTipText = "Send /$cmd"
+                addActionListener { sendToTerminal("/$cmd\r") }
+            }
         }
 
         val gitRefreshInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -565,22 +584,15 @@ class ClaudeSessionEditor(
                         changedFiles.count { it in sessionFiles }
                     } else 0
 
-                    val pureFiles = getPureSessionFiles(gitDir, ops)
-
                     ApplicationManager.getApplication().invokeLater {
                         branchName.text = branch
+                        branchName.foreground = if (branch == "main" || branch == "master") COLOR_ORANGE else COLOR_GREEN
                         statsLabel.text = when {
                             changed == 0 -> "clean"
                             bySession > 0 -> "$changed changed ($bySession by session)"
                             else -> "$changed file${if (changed > 1) "s" else ""} changed"
                         }
                         statsLabel.foreground = if (changed > 0) COLOR_YELLOW else UIManager.getColor("Label.disabledForeground")
-                        commitButton.isEnabled = pureFiles.isNotEmpty()
-                        commitButton.toolTipText = when {
-                            pureFiles.isNotEmpty() -> "Commit ${pureFiles.size} session file${if (pureFiles.size > 1) "s" else ""}"
-                            bySession > 0 -> "Files have mixed changes from other sources"
-                            else -> "No session changes to commit"
-                        }
                     }
                 } catch (_: Exception) {
                 } finally {
@@ -593,42 +605,17 @@ class ClaudeSessionEditor(
 
         // Refresh on status updates (proxy for session activity)
         val statusService = ClaudeStatusService.getInstance(project)
-        val listener: (String, ClaudeStatus?) -> Unit = { sid, _ ->
-            if (sid == file.sessionId) refresh()
+        val listener: (String, ClaudeStatus?) -> Unit = { sid, status ->
+            if (sid == file.sessionId) {
+                status?.cwd?.let { liveCwd = it }
+                refresh()
+            }
         }
         statusService.addStatusListener(listener)
         Disposer.register(sessionDisposable, Disposable { statusService.removeStatusListener(listener) })
 
         wireToolbarRefresh(::refresh)
         wireNewWorktreeDirPoll(::refresh)
-
-        commitButton.addActionListener {
-            val gitDir = resolveGitDir() ?: return@addActionListener
-            ApplicationManager.getApplication().executeOnPooledThread {
-                try {
-                    val pureFiles = getPureSessionFiles(gitDir, getSessionFileOperations())
-                    if (pureFiles.isEmpty()) return@executeOnPooledThread
-
-                    // Stage only the session's pure files
-                    for (f in pureFiles) {
-                        val rel = java.nio.file.Path.of(gitDir).relativize(java.nio.file.Path.of(f)).toString()
-                        execGitWithExitCode(gitDir, "add", rel)
-                    }
-
-                    // Ask Claude to generate the commit message and commit
-                    val fileList = pureFiles.joinToString(", ") {
-                        java.nio.file.Path.of(gitDir).relativize(java.nio.file.Path.of(it)).toString()
-                    }
-                    ApplicationManager.getApplication().invokeLater {
-                        sendToTerminal("commit the staged changes to: $fileList\r")
-                    }
-                } catch (e: Exception) {
-                    ApplicationManager.getApplication().invokeLater {
-                        showNotification("Commit failed: ${e.message}", NotificationType.ERROR)
-                    }
-                }
-            }
-        }
 
         branchLabel.alignmentY = java.awt.Component.CENTER_ALIGNMENT
         branchName.alignmentY = java.awt.Component.CENTER_ALIGNMENT
@@ -641,8 +628,10 @@ class ClaudeSessionEditor(
             add(branchName)
             add(javax.swing.Box.createHorizontalStrut(8))
             add(statsLabel)
-            add(javax.swing.Box.createHorizontalStrut(8))
-            add(commitButton)
+            slashButtons.forEach {
+                add(javax.swing.Box.createHorizontalStrut(4))
+                add(it)
+            }
         }
 
         val bar = JPanel(BorderLayout())
@@ -1275,14 +1264,80 @@ class ClaudeSessionEditor(
         return simulated == currentContent
     }
 
+    /** Paint each combo entry (and the closed combo) in its own colour. */
+    private fun colorize(combo: javax.swing.JComboBox<String>, colorOf: (String) -> Color?) {
+        combo.renderer = com.intellij.ui.SimpleListCellRenderer.create { label, value, _ ->
+            label.text = value ?: ""
+            label.foreground = value?.let(colorOf) ?: UIManager.getColor("Label.foreground")
+            label.font = label.font.deriveFont(java.awt.Font.BOLD)
+        }
+    }
+
+    /** Last-wins read of a top-level key from user, project and project-local Claude settings. */
+    private fun claudeSetting(key: String): String? {
+        val home = System.getProperty("user.home")
+        val base = project.basePath
+        val files = listOfNotNull(
+            "$home/.claude/settings.json",
+            base?.let { "$it/.claude/settings.json" },
+            base?.let { "$it/.claude/settings.local.json" }
+        )
+        var value: String? = null
+        for (f in files) {
+            try {
+                val text = java.nio.file.Files.readString(java.nio.file.Path.of(f))
+                val obj = com.google.gson.JsonParser.parseString(text).asJsonObject
+                obj.get(key)?.takeIf { it.isJsonPrimitive }?.asString?.let { value = it }
+            } catch (_: Exception) {}
+        }
+        return value
+    }
+
+    private fun createEffortDropdown(): JComponent {
+        val levels = arrayOf("low", "medium", "high", "xhigh", "max")
+        val combo = javax.swing.JComboBox(levels)
+        combo.isFocusable = false
+        combo.toolTipText = "Effort level"
+        colorize(combo) { EFFORT_COLORS[it] }
+        var updating = false
+
+        claudeSetting("effortLevel")?.takeIf { it in levels }
+            ?.let { updating = true; combo.selectedItem = it; updating = false }
+
+        combo.addActionListener {
+            if (updating) return@addActionListener
+            val selected = combo.selectedItem as? String ?: return@addActionListener
+            sendToTerminal("/effort $selected\r")
+        }
+
+        val statusService = ClaudeStatusService.getInstance(project)
+        val listener: (String, ClaudeStatus?) -> Unit = listener@{ sid, status ->
+            val monitoringId = file.sessionId ?: return@listener
+            if (sid != monitoringId) return@listener
+            val level = status?.effortLevel?.takeIf { it in levels } ?: return@listener
+            ApplicationManager.getApplication().invokeLater {
+                if (combo.selectedItem != level) {
+                    updating = true
+                    combo.selectedItem = level
+                    updating = false
+                }
+            }
+        }
+        statusService.addStatusListener(listener)
+        Disposer.register(sessionDisposable, Disposable { statusService.removeStatusListener(listener) })
+
+        return combo
+    }
+
     private fun createModelDropdown(): JComponent {
-        val aliases = arrayOf("sonnet", "opus", "haiku", "sonnet[1m]", "opus[1m]", "opusplan")
+        val aliases = arrayOf("fable", "opus", "sonnet", "haiku", "opus[1m]", "sonnet[1m]", "opusplan")
 
         // Map model IDs from the status line to the alias used in /model
         fun idToAlias(modelId: String): String? {
             val id = modelId.lowercase()
             val has1m = id.contains("[1m]")
             return when {
+                id.contains("fable") -> "fable"
                 id.contains("opus") -> if (has1m) "opus[1m]" else "opus"
                 id.contains("sonnet") -> if (has1m) "sonnet[1m]" else "sonnet"
                 id.contains("haiku") -> "haiku"
@@ -1292,10 +1347,12 @@ class ClaudeSessionEditor(
 
         val combo = javax.swing.JComboBox(aliases)
         combo.isFocusable = false
+        colorize(combo) { a -> MODEL_COLORS.entries.firstOrNull { a.startsWith(it.key) }?.value }
         var updating = false
 
-        // Set initial selection from current status
-        file.modelId?.let { idToAlias(it) }?.let { combo.selectedItem = it }
+        // Initial selection: live status, else the model the CLI starts with (settings.json)
+        (file.modelId?.let { idToAlias(it) } ?: claudeSetting("model")?.let { m -> aliases.firstOrNull { it == m } ?: idToAlias(m) })
+            ?.let { updating = true; combo.selectedItem = it; updating = false }
 
         combo.addActionListener {
             if (updating) return@addActionListener
@@ -1434,6 +1491,82 @@ class ClaudeSessionEditor(
         }
     }
 
+    /** Tick the cache bar each second; rescan the transcript tail every few seconds. */
+    private fun startCacheTimer() {
+        var ticks = 0
+        val timer = javax.swing.Timer(1000) {
+            if (!tabShowing) return@Timer
+            if (ticks++ % 5 == 0) scanCacheState()
+            paintCacheBar()
+        }
+        timer.initialDelay = 0
+        timer.start()
+        Disposer.register(sessionDisposable, Disposable { timer.stop() })
+    }
+
+    private fun paintCacheBar() {
+        val at = lastReplyAt
+        if (at == null) {
+            cacheProgress.value = 0
+            cacheProgress.string = "Cache: —"
+            return
+        }
+        val ttl = cacheTtl.toMillis()
+        val left = (ttl - java.time.Duration.between(at, java.time.Instant.now()).toMillis()).coerceAtLeast(0)
+        val frac = left.toDouble() / ttl
+        cacheProgress.value = (frac * 1000).toInt()
+        val secs = left / 1000
+        cacheProgress.string = if (left == 0L) "Cache expired" else "Cache %d:%02d".format(secs / 60, secs % 60)
+        cacheProgress.foreground = when {
+            frac > 0.5 -> COLOR_GREEN
+            frac > 0.2 -> COLOR_YELLOW
+            else -> COLOR_RED
+        }
+    }
+
+    /**
+     * The newest assistant line's timestamp is the last cache refresh; the newest line that
+     * WROTE cache says which TTL it used (1h vs 5m tokens in usage.cache_creation).
+     */
+    private fun scanCacheState() {
+        val path = transcriptPath() ?: return
+        if (!cacheScanInFlight.compareAndSet(false, true)) return
+        com.clauditor.util.ClauditorExecutor.submit {
+            try {
+                val tail = java.io.RandomAccessFile(path.toFile(), "r").use { raf ->
+                    val len = raf.length()
+                    val start = (len - 512 * 1024).coerceAtLeast(0)
+                    raf.seek(start)
+                    val buf = ByteArray((len - start).toInt())
+                    raf.readFully(buf)
+                    String(buf, Charsets.UTF_8)
+                }
+                var replyAt: java.time.Instant? = null
+                var ttl: java.time.Duration? = null
+                for (line in tail.lineSequence().toList().asReversed()) {
+                    if (!line.contains("\"type\":\"assistant\"")) continue
+                    val obj = try { com.google.gson.JsonParser.parseString(line).asJsonObject } catch (_: Exception) { continue }
+                    if (obj.get("type")?.asString != "assistant") continue
+                    val usage = obj.getAsJsonObject("message")?.getAsJsonObject("usage") ?: continue
+                    if (replyAt == null) {
+                        replyAt = obj.get("timestamp")?.asString?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
+                    }
+                    val cc = usage.getAsJsonObject("cache_creation")
+                    val h1 = cc?.get("ephemeral_1h_input_tokens")?.asLong ?: 0
+                    val m5 = cc?.get("ephemeral_5m_input_tokens")?.asLong ?: 0
+                    if (h1 > 0) ttl = java.time.Duration.ofHours(1)
+                    else if (m5 > 0) ttl = java.time.Duration.ofMinutes(5)
+                    if (replyAt != null && ttl != null) break
+                }
+                replyAt?.let { lastReplyAt = it }
+                ttl?.let { cacheTtl = it }
+            } catch (_: Exception) {
+            } finally {
+                cacheScanInFlight.set(false)
+            }
+        }
+    }
+
     private fun updateContextBar(status: ClaudeStatus?) {
         ApplicationManager.getApplication().invokeLater {
             val usedPercent = status?.contextUsedPercent
@@ -1516,7 +1649,6 @@ class ClaudeSessionEditor(
         focusComponent = null
         historyPanel = null
         historySplitter = null
-        maxEffortButton = null
         lastTitle = null
 
         // Reset class-level UI components so they don't show stale state until the new PTY reports back.
@@ -1589,6 +1721,20 @@ class ClaudeSessionEditor(
         private val COLOR_GREEN = Color(0x5B, 0xA8, 0x5B)
         private val COLOR_YELLOW = Color(0xD4, 0xA0, 0x1E)
         private val COLOR_RED = Color(0xD4, 0x4B, 0x4B)
+        private val COLOR_ORANGE = Color(0xE0, 0x7B, 0x2E)
+        private val COLOR_BLUE = Color(0x4A, 0x90, 0xD9)
+        private val COLOR_PURPLE = Color(0xA8, 0x6B, 0xD6)
+        private val COLOR_GRAY = Color(0x8C, 0x8C, 0x8C)
+
+        private val MODEL_COLORS = linkedMapOf(
+            "fable" to COLOR_BLUE, "opus" to COLOR_PURPLE, "sonnet" to COLOR_ORANGE, "haiku" to COLOR_GREEN
+        )
+        private val EFFORT_COLORS = mapOf(
+            "low" to COLOR_GRAY, "medium" to COLOR_BLUE, "high" to COLOR_YELLOW, "xhigh" to COLOR_ORANGE, "max" to COLOR_RED
+        )
+
+        /** Project skills sent as slash commands from the git row, in display order. */
+        private val SLASH_BUTTONS = listOf("merge", "push", "pull")
 
         private const val GIT_TIMEOUT_MS = 15_000L
         private const val GIT_OUTPUT_LIMIT = 400

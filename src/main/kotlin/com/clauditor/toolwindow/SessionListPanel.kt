@@ -189,13 +189,8 @@ class SessionListPanel(
                         dialog.enteredName?.takeIf { it.isNotEmpty() }?.let { onNewSession(it) }
                     }
                 } else {
-                    val name = Messages.showInputDialog(
-                        project,
-                        dialogPrompt,
-                        dialogTitle,
-                        Messages.getQuestionIcon()
-                    )?.trim().orEmpty()
-                    if (name.isNotEmpty()) onNewSession(name)
+                    // No name prompt: the CLI titles the session after the first message
+                    onNewSession("New session")
                 }
             }
         }

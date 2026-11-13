@@ -80,7 +80,7 @@ class ClaudeTerminalService(private val project: Project) {
         onUserInput: (() -> Unit)? = null,
         onUnresponsive: (() -> Unit)? = null
     ): TerminalSession {
-        return createWidget(arrayOf("claude", "--name", name), parent, workingDir = workingDir, statusFile = statusFile, notifyFile = notifyFile,
+        return createWidget(arrayOf("claude"), parent, workingDir = workingDir, statusFile = statusFile, notifyFile = notifyFile,
             onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
     }
 

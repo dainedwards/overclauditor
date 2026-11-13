@@ -357,7 +357,8 @@ class ClaudeStatusService(private val project: Project) : Disposable {
                 sevenDayResetsAt = sevenDay?.get("resets_at")?.asLong,
                 effortLevel = effort?.get("level")?.asString,
                 thinkingEnabled = thinking?.get("enabled")?.asBoolean,
-                reportedSessionId = obj.get("session_id")?.asString
+                reportedSessionId = obj.get("session_id")?.asString,
+                cwd = obj.getAsJsonObject("workspace")?.get("current_dir")?.asString ?: obj.get("cwd")?.asString
             )
         } catch (_: Exception) {
             null

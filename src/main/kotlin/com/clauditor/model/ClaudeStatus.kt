@@ -20,5 +20,7 @@ data class ClaudeStatus(
      * is CURRENTLY showing. Used to detect an in-terminal session switch ("portal"), where
      * this diverges from the sessionId the tab was bound to.
      */
-    val reportedSessionId: String? = null
+    val reportedSessionId: String? = null,
+    /** The CLI's current working directory (moves when the session enters a worktree). */
+    val cwd: String? = null
 )
