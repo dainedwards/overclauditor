@@ -181,9 +181,10 @@ class ClaudeTerminalService(private val project: Project) : Disposable {
         Disposer.register(parent, Disposable {
             if (ptyProcess.isAlive) {
                 ptyProcess.destroy()
-                // Force kill if it doesn't exit promptly (e.g. during tab detach)
-                if (!ptyProcess.waitFor(2, TimeUnit.SECONDS)) {
-                    ptyProcess.destroyForcibly()
+                // Force kill if it doesn't exit promptly. Waited for on a pooled thread: this runs
+                // on the UI thread when a tab closes, and a 2-second wait there froze the IDE.
+                com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+                    if (!ptyProcess.waitFor(2, TimeUnit.SECONDS)) ptyProcess.destroyForcibly()
                 }
             }
         })

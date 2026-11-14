@@ -41,6 +41,9 @@ Clauditor 0.7.30 (https://github.com/bdkent/clauditor).
 - The Commit button is gone; caches moved to the IDE system folder and are removed on uninstall.
 
 ### Fixed
+- Closing a session tab could freeze the IDE for up to 2 seconds while it waited for Claude to
+  exit on the UI thread; the wait now runs in the background. (Tab drags no longer close the
+  session at all.)
 - Dragging a session tab (reordering, splitting, moving to another window) restarted the session
   and lost its terminal history: the IDE closes and reopens the tab, and the plugin killed Claude
   on close and ran `claude --resume` on reopen. The running session now lives on the tab's file,
