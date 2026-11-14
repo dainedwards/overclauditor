@@ -1569,6 +1569,12 @@ class ClaudeSessionEditor(
         }
     }
 
+    /**
+     * Tie a new, forked or new-worktree tab to the session Claude created for it. The status
+     * line JSON the plugin captures for this tab carries the real `session_id`, so the link is
+     * exact; it used to be guessed from transcript timestamps, which could pick the wrong session
+     * or none (the tab then stayed "New Session" and wasn't restored after a restart).
+     */
     private fun setupNewSessionLinking(
         sessionService: ClaudeSessionService,
         statusService: ClaudeStatusService,
@@ -1577,44 +1583,31 @@ class ClaudeSessionEditor(
         tempStatusFile: Path,
         notifyFile: Path
     ) {
-        val existingIds = sessionService.getSessions().map { it.sessionId }.toSet()
-        val startedAt = System.currentTimeMillis()
-
-        lateinit var linkListener: () -> Unit
-        linkListener = {
-            val openIds = FileEditorManager.getInstance(project).openFiles
-                .filterIsInstance<ClaudeSessionVirtualFile>()
-                .mapNotNull { it.sessionId }
-                .toSet()
-
-            val candidate = sessionService.getSessions()
-                .filter { it.sessionId !in existingIds && it.sessionId !in openIds }
-                .minByOrNull { kotlin.math.abs(it.modified.toEpochMilli() - startedAt) }
-
-            if (candidate != null) {
-                file.sessionId = candidate.sessionId
-                file.baseName = candidate.tabTitle
-                if (file.workingDir == null && candidate.worktreeName != null && project.basePath != null) {
+        val listener: (String, ClaudeStatus?) -> Unit = listener@{ sid, status ->
+            if (sid != tempMonitoringId || file.sessionId != null) return@listener
+            val real = status?.reportedSessionId?.takeIf { it.isNotBlank() } ?: return@listener
+            ApplicationManager.getApplication().invokeLater {
+                if (project.isDisposed || file.sessionId != null) return@invokeLater
+                file.sessionId = real
+                val listed = sessionService.getSessions().find { it.sessionId == real }
+                listed?.let { file.baseName = it.tabTitle }
+                if (file.workingDir == null && listed?.worktreeName != null && project.basePath != null) {
                     file.workingDir = com.clauditor.util.ClaudePathEncoder
-                        .worktreeAbsolutePath(project.basePath!!, candidate.worktreeName)
+                        .worktreeAbsolutePath(project.basePath!!, listed.worktreeName)
                 }
-                persistence.add(candidate.sessionId)
-
-                // Migrate status monitoring from temp to real session ID.
-                // Keep the original temp file paths — CLAUDITOR_STATUS_FILE/NOTIFY_FILE
-                // were baked into the process env at spawn, so claude keeps writing to
-                // the temp paths for the life of the process.
+                persistence.add(real)
+                // Claude keeps writing the temp status/notify paths baked into its env at spawn.
                 statusService.stopMonitoring(tempMonitoringId)
-                statusService.startMonitoring(candidate.sessionId, tempStatusFile, notifyFile)
-
-                // Force: a worktree tab's title doesn't change on link (still the
-                // worktree name), but the tab tooltip now has a session ID to show.
+                statusService.startMonitoring(real, tempStatusFile, notifyFile)
+                syncTitle(listed)
                 refreshTabTitle(force = true)
-                sessionService.removeChangeListener(linkListener)
+                sessionService.refresh()  // list the new session (and fill its title) now
             }
         }
-        sessionService.addChangeListener(linkListener)
-        Disposer.register(sessionDisposable, Disposable { sessionService.removeChangeListener(linkListener) })
+        statusService.addStatusListener(listener)
+        Disposer.register(sessionDisposable, Disposable { statusService.removeStatusListener(listener) })
+        // The status may already be in: link from it at once.
+        statusService.getStatus(tempMonitoringId)?.let { listener(tempMonitoringId, it) }
     }
 
     private fun stopLoading() {
