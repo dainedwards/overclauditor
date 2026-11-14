@@ -68,8 +68,9 @@ within seconds (summary).
 - **`defaultModel`** / **`defaultEffort`** (e.g. `"opus"`, `"medium"`) — what every NEW session
   starts with (`claude --model --effort`, session-only). The toolbar's dropdowns change only the
   session they're in (the `/model` and `/effort` pickers' session-only key), never the saved
-  default. Resumed sessions and forks come back on the model and effort they last ran on (read
-  from the transcript, passed as `--model --effort`).
+  default. Resumed sessions and forks keep their model (Claude Code restores it) and come
+  back on the effort they last ran on (read from the transcript, passed as `--effort`; Claude
+  Code alone would start them on the saved default).
   **Agent: ask the user** which model and effort they want new sessions to start on.
 - **`bundledCommands`** (default `true`) — load the bundled `/overclauditor:merge`, `:push`,
   `:pull` into plugin sessions (`claude --plugin-dir <IDE system folder>/overclauditor/claude-plugin`).

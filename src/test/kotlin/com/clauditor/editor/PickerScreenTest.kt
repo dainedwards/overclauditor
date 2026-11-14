@@ -52,7 +52,7 @@ class SessionSettingsTest {
         val last = com.clauditor.util.SessionSettings.fromLines(lines)
         assertEquals("claude-fable-5-2", last.model)
         assertEquals("high", last.effort)
-        assertEquals(listOf("--model", "claude-fable-5-2", "--effort", "high"), last.args())
+        assertEquals(listOf("--effort", "high"), last.args())
     }
 
     @Test fun noRepliesNoArgs() = assertEquals(emptyList<String>(), com.clauditor.util.SessionSettings.fromLines(listOf("""{"type":"user"}""")).args())

@@ -35,8 +35,8 @@ object OverclauditorConfig {
         /**
          * Model and effort every NEW session starts with (claude --model / --effort, session-only).
          * The dropdowns change only their own session; these decide where new ones start.
-         * Null: leave it to Claude Code's own default. Resumes and forks get the model and effort
-         * they last ran on (SessionSettings).
+         * Null: leave it to Claude Code's own default. Resumes and forks keep their model and get the
+         * effort they last ran on (SessionSettings).
          */
         val defaultModel: String? = null,
         val defaultEffort: String? = null

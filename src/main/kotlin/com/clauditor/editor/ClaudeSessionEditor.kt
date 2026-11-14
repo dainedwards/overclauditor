@@ -587,7 +587,7 @@ class ClaudeSessionEditor(
     }
 
     /** Path to this session's transcript JSONL — resolves the worktree project dir when applicable. */
-    /** --model / --effort the session last ran on (its transcript), for a resume or fork. */
+    /** --effort the session last ran on (its transcript), for a resume or fork: resume restores the model, not the effort. */
     private fun lastSettingsArgs(sessionId: String): List<String> =
         com.clauditor.util.SessionSettings.read(com.clauditor.util.SessionSettings.locate(sessionId, transcriptPath(sessionId))).args()
 

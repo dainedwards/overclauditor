@@ -6,15 +6,14 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * The model and effort a session last ran on, from its transcript: every main-chain reply
- * records `requestedModel` and `effort`. A resume or fork passes them back as `--model` /
- * `--effort` (session-only flags), so a session comes back as it was, not on whatever default
- * another tab saved since.
+ * The effort a session last ran on, from its transcript: every main-chain reply records
+ * `effort`. `claude --resume` restores the session's model but not its effort (it starts on the
+ * saved default, checked on 2.1.325), so a resume or fork passes it back as `--effort`
+ * (session-only). The model is read too, for completeness, but not passed.
  */
 object SessionSettings {
     data class Last(val model: String?, val effort: String?) {
-        fun args(): List<String> =
-            (model?.let { listOf("--model", it) } ?: emptyList()) + (effort?.let { listOf("--effort", it) } ?: emptyList())
+        fun args(): List<String> = effort?.let { listOf("--effort", it) } ?: emptyList()
     }
 
     private const val TAIL_BYTES = 1L * 1024 * 1024
