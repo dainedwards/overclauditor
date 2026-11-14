@@ -19,7 +19,10 @@ import java.util.concurrent.TimeUnit
 data class TerminalSession(val widget: JBTerminalWidget, val process: PtyProcess)
 
 @Service(Service.Level.PROJECT)
-class ClaudeTerminalService(private val project: Project) {
+class ClaudeTerminalService(private val project: Project) : Disposable {
+    /** Parent of every LiveTerminal: they outlive their editors, not the project. */
+    override fun dispose() {}
+
 
     private val log = Logger.getInstance(ClaudeTerminalService::class.java)
 

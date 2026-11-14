@@ -31,6 +31,8 @@ class ClaudeSessionVirtualFile(
         ?: "new-${System.nanoTime()}"
 
     var baseName: String = name
+    /** The running Claude process and terminal; outlives an editor closed to be reopened (a tab drag). */
+    @Volatile var live: LiveTerminal? = null
     var workingDir: String? = null
     var isWorktreeSession: Boolean = newWorktreeName != null
     var modelId: String? = null

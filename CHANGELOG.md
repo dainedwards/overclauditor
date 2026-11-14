@@ -41,6 +41,11 @@ Clauditor 0.7.30 (https://github.com/bdkent/clauditor).
 - The Commit button is gone; caches moved to the IDE system folder and are removed on uninstall.
 
 ### Fixed
+- Dragging a session tab (reordering, splitting, moving to another window) restarted the session
+  and lost its terminal history: the IDE closes and reopens the tab, and the plugin killed Claude
+  on close and ran `claude --resume` on reopen. The running session now lives on the tab's file,
+  as the IDE's own terminal tabs do, and a close made to reopen (CLOSING_TO_REOPEN) hands it to
+  the new editor.
 - The model and effort dropdowns saved the pick as Claude Code's default for every new session
   (and said so), so one tab's "low" became every resumed session's effort. They now drive the
   `/model` and `/effort` pickers' session-only key, reading the screen at each step; settings.json

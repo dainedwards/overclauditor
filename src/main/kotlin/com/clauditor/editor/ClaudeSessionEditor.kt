@@ -203,7 +203,10 @@ class ClaudeSessionEditor(
         val isResume = file.sessionId != null && file.forkFrom == null
         loadingPanel.startLoading()
 
-        if (isResume) {
+        if (isResume && file.live?.isAlive == true) {
+            startTerminalSession()  // a dragged tab: its own session is still running
+            file.sessionId?.let { persistence.add(it) }
+        } else if (isResume) {
             AppExecutorUtil.getAppScheduledExecutorService().execute {
                 val externalIds = com.clauditor.util.ClaudeProcessDetector
                     .detectExternalSessions(project.basePath, sessionService.getSessions())
@@ -293,12 +296,13 @@ class ClaudeSessionEditor(
 
         val isFork = file.forkFrom != null
         val isNewWorktree = file.newWorktreeName != null
-        val isNewSession = file.sessionId == null && !isFork && !isNewWorktree
-        val needsLinking = isNewSession || isFork || isNewWorktree
-        val tempId = if (needsLinking) "new-${System.nanoTime()}" else null
-        val monitoringId = file.sessionId ?: tempId!!
-        val statusFile = statusService.createStatusFilePath(monitoringId)
-        val notifyFile = statusService.createNotifyFilePath(monitoringId)
+        // A tab drag closes this file's editor and opens a new one: adopt the running session.
+        val adopted = file.live?.takeIf { it.isAlive && !it.owned }
+        val needsLinking = adopted?.needsLinking?.let { it && file.sessionId == null }
+            ?: (file.sessionId == null || isFork || isNewWorktree)
+        val monitoringId = adopted?.monitoringId ?: file.sessionId ?: "new-${System.nanoTime()}"
+        val statusFile = adopted?.statusFile ?: statusService.createStatusFilePath(monitoringId)
+        val notifyFile = adopted?.notifyFile ?: statusService.createNotifyFilePath(monitoringId)
 
         val onActiveChanged: (Boolean) -> Unit = { active ->
             file.isThinking = active
@@ -332,22 +336,30 @@ class ClaudeSessionEditor(
             refreshTabTitle()
         }
 
-        val session = when {
-            isFork -> terminalService.createForkWidget(file.forkFrom!!, sessionDisposable, extraArgs = lastSettingsArgs(file.forkFrom!!), workingDir = file.workingDir, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
-            file.sessionId != null -> terminalService.createResumeWidget(file.sessionId!!, sessionDisposable, extraArgs = lastSettingsArgs(file.sessionId!!), workingDir = file.workingDir, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
-            isNewWorktree -> terminalService.createNewWorktreeWidget(file.newWorktreeName!!, sessionDisposable, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
-            else -> terminalService.createNewNamedSessionWidget(file.baseName, sessionDisposable, workingDir = file.workingDir, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
+        val live = adopted ?: LiveTerminal(
+            Disposer.newDisposable(terminalService, "claude-terminal"), monitoringId, statusFile, notifyFile, needsLinking
+        ).also { lt ->
+            val owner = lt.disposable
+            val active: (Boolean) -> Unit = { lt.onActive(it) }
+            val input: () -> Unit = { lt.onUserInput() }
+            val hung: (Boolean) -> Unit = { lt.onUnresponsive(it) }
+            lt.session = when {
+                isFork -> terminalService.createForkWidget(file.forkFrom!!, owner, extraArgs = lastSettingsArgs(file.forkFrom!!), workingDir = file.workingDir, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = active, onUserInput = input, onUnresponsive = hung)
+                file.sessionId != null -> terminalService.createResumeWidget(file.sessionId!!, owner, extraArgs = lastSettingsArgs(file.sessionId!!), workingDir = file.workingDir, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = active, onUserInput = input, onUnresponsive = hung)
+                isNewWorktree -> terminalService.createNewWorktreeWidget(file.newWorktreeName!!, owner, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = active, onUserInput = input, onUnresponsive = hung)
+                else -> terminalService.createNewNamedSessionWidget(file.baseName, owner, workingDir = file.workingDir, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = active, onUserInput = input, onUnresponsive = hung)
+            }
+            lt.session.process.onExit().thenAccept { p -> lt.onExit(p.exitValue()) }
+            file.live = lt
         }
-
-        ptyProcess = session.process
-        terminalWidget = session.widget
-        focusComponent = session.widget.preferredFocusableComponent
-
+        live.owned = true
+        live.onActive = onActiveChanged
+        live.onUserInput = onUserInput
+        live.onUnresponsive = onUnresponsive
         // Normal exit (0): close the tab. Abnormal exit: keep it open so the error is visible.
-        session.process.onExit().thenAccept { process ->
+        live.onExit = { code ->
             ApplicationManager.getApplication().invokeLater {
                 if (project.isDisposed) return@invokeLater
-                val code = process.exitValue()
                 if (code == 0) {
                     FileEditorManager.getInstance(project).closeFile(file)
                 } else {
@@ -358,6 +370,26 @@ class ClaudeSessionEditor(
                 }
             }
         }
+        // This editor going away: keep the session if the IDE is only moving the tab (drag, split,
+        // another window), else end it. The flag is set for the whole close-then-reopen, so the
+        // check runs again once the reopen would have happened.
+        Disposer.register(sessionDisposable, Disposable {
+            live.owned = false
+            live.onActive = {}; live.onUserInput = {}; live.onUnresponsive = {}; live.onExit = {}
+            if (file.getUserData(com.intellij.openapi.fileEditor.FileEditorManagerKeys.CLOSING_TO_REOPEN) == true) {
+                ApplicationManager.getApplication().invokeLater({
+                    if (!live.owned) { live.kill(); if (file.live === live) file.live = null }
+                }, project.disposed)
+            } else {
+                live.kill()
+                if (file.live === live) file.live = null
+            }
+        })
+        val session = live.session
+
+        ptyProcess = session.process
+        terminalWidget = session.widget
+        focusComponent = session.widget.preferredFocusableComponent
 
 
         // Message history side panel
@@ -402,9 +434,13 @@ class ClaudeSessionEditor(
         // Drag-and-drop: accept files dropped onto the terminal
         setupDropTarget(session.widget.component)
 
-        loadingPanel.startLoading()
-        AppExecutorUtil.getAppScheduledExecutorService()
-            .schedule(::stopLoading, 5L, TimeUnit.SECONDS)
+        if (adopted != null) {
+            stopLoading()  // already running: nothing to wait for
+        } else {
+            loadingPanel.startLoading()
+            AppExecutorUtil.getAppScheduledExecutorService()
+                .schedule(::stopLoading, 5L, TimeUnit.SECONDS)
+        }
 
         // Status monitoring
         statusService.startMonitoring(monitoringId, statusFile, notifyFile)
@@ -464,7 +500,7 @@ class ClaudeSessionEditor(
             }
 
             override fun fileClosed(source: FileEditorManager, closedFile: VirtualFile) {
-                if (closedFile == file) {
+                if (closedFile == file && closedFile.getUserData(com.intellij.openapi.fileEditor.FileEditorManagerKeys.CLOSING_TO_REOPEN) != true) {
                     statusService.clearSession(monitoringId)
                     file.sessionId?.let { if (it != monitoringId) statusService.clearSession(it) }
                 }
