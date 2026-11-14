@@ -333,8 +333,8 @@ class ClaudeSessionEditor(
         }
 
         val session = when {
-            isFork -> terminalService.createForkWidget(file.forkFrom!!, sessionDisposable, workingDir = file.workingDir, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
-            file.sessionId != null -> terminalService.createResumeWidget(file.sessionId!!, sessionDisposable, workingDir = file.workingDir, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
+            isFork -> terminalService.createForkWidget(file.forkFrom!!, sessionDisposable, extraArgs = lastSettingsArgs(file.forkFrom!!), workingDir = file.workingDir, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
+            file.sessionId != null -> terminalService.createResumeWidget(file.sessionId!!, sessionDisposable, extraArgs = lastSettingsArgs(file.sessionId!!), workingDir = file.workingDir, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
             isNewWorktree -> terminalService.createNewWorktreeWidget(file.newWorktreeName!!, sessionDisposable, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
             else -> terminalService.createNewNamedSessionWidget(file.baseName, sessionDisposable, workingDir = file.workingDir, statusFile = statusFile, notifyFile = notifyFile, onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive)
         }
@@ -587,8 +587,13 @@ class ClaudeSessionEditor(
     }
 
     /** Path to this session's transcript JSONL — resolves the worktree project dir when applicable. */
-    private fun transcriptPath(): Path? {
-        val sessionId = file.sessionId ?: return null
+    /** --model / --effort the session last ran on (its transcript), for a resume or fork. */
+    private fun lastSettingsArgs(sessionId: String): List<String> =
+        com.clauditor.util.SessionSettings.read(com.clauditor.util.SessionSettings.locate(sessionId, transcriptPath(sessionId))).args()
+
+    private fun transcriptPath(): Path? = file.sessionId?.let { transcriptPath(it) }
+
+    private fun transcriptPath(sessionId: String): Path? {
         val basePath = project.basePath ?: return null
         val workingDir = file.workingDir
         val projectDir = if (file.isWorktreeSession && workingDir != null) {
@@ -1337,7 +1342,7 @@ class ClaudeSessionEditor(
         combo.addActionListener {
             if (updating) return@addActionListener
             val selected = combo.selectedItem as? String ?: return@addActionListener
-            sendCommand("/effort $selected\r")
+            pickForSession("effort", selected)
         }
 
         val statusService = ClaudeStatusService.getInstance(project)
@@ -1381,7 +1386,7 @@ class ClaudeSessionEditor(
         combo.addActionListener {
             if (updating) return@addActionListener
             val selected = combo.selectedItem as? String ?: return@addActionListener
-            sendCommand("/model $selected\r")
+            pickForSession("model", selected)
         }
 
         // Sync selection when status updates report a different model
@@ -1468,13 +1473,53 @@ class ClaudeSessionEditor(
         sendToTerminal(if (stash) "\u0013$text" else text)
     }
 
-    private fun hasDraft(): Boolean {
-        val buffer = terminalWidget?.terminalTextBuffer ?: return false
+    private fun hasDraft(): Boolean = screenLines()?.let(::draftIn) ?: false
+
+    private fun screenLines(): List<String>? {
+        val buffer = terminalWidget?.terminalTextBuffer ?: return null
         buffer.lock()
-        val lines = try {
+        return try {
             (0 until buffer.screenLinesCount).map { buffer.getLine(it).text }
-        } catch (_: Exception) { return false } finally { buffer.unlock() }
-        return draftIn(lines)
+        } catch (_: Exception) { null } finally { buffer.unlock() }
+    }
+
+    /**
+     * Set the model or effort for THIS session only. `/model x` and `/effort x` also save x as
+     * the default for every new session (and say so); their pickers have a session-only key
+     * ("s"). So open the picker, step to [target] reading the screen after each key, press s.
+     * Anything unexpected: Esc out and say so, never fall back to saving a default.
+     */
+    private fun pickForSession(kind: String, target: String) {
+        sendCommand("/$kind\r")
+        com.clauditor.util.ClauditorExecutor.submit {
+            val ok = try { drivePicker(kind, target) } catch (_: Exception) { false }
+            if (!ok) {
+                sendToTerminal("\u001b")
+                ApplicationManager.getApplication().invokeLater {
+                    showNotification("Couldn't set $kind to $target for this session", NotificationType.WARNING)
+                }
+            }
+        }
+    }
+
+    private fun drivePicker(kind: String, target: String): Boolean {
+        val deadline = System.currentTimeMillis() + 4000
+        var steps = 0
+        while (System.currentTimeMillis() < deadline) {
+            Thread.sleep(120)
+            val screen = screenLines() ?: return false
+            if (screen.none { it.contains(SESSION_ONLY_HINT) }) continue  // picker not drawn yet
+            val move = if (kind == "effort") effortMove(screen, target) else modelMove(screen, target)
+            when {
+                move == null -> return false
+                move == 0 -> { sendToTerminal("s"); return true }
+                ++steps > 10 -> return false
+                kind == "effort" -> sendToTerminal(if (move > 0) "\u001b[C" else "\u001b[D")
+                else -> sendToTerminal(if (move > 0) "\u001b[B" else "\u001b[A")
+            }
+            Thread.sleep(80)
+        }
+        return false
     }
 
     fun sendToTerminal(text: String) {
@@ -1970,6 +2015,40 @@ class ClaudeSessionEditor(
     override fun dispose() { Disposer.dispose(rootDisposable) }
 
     companion object {
+        /** Both pickers' footers name the session-only key with this phrase. */
+        private const val SESSION_ONLY_HINT = "this session only"
+        private val EFFORT_LEVELS = listOf("low", "medium", "high", "xhigh", "max")
+
+        /**
+         * The /effort picker: a ▲ on the slider over the level labels. 0 when ▲ is over
+         * [target], +1/-1 to step right/left, null if the picker can't be read.
+         */
+        internal fun effortMove(screen: List<String>, target: String): Int? {
+            val want = EFFORT_LEVELS.indexOf(target).takeIf { it >= 0 } ?: return null
+            for (i in 0 until screen.size - 1) {
+                val col = screen[i].indexOf('▲').takeIf { it >= 0 } ?: continue
+                val labels = screen[i + 1]
+                val centers = EFFORT_LEVELS.map { l -> Regex("\\b$l\\b").find(labels)?.range?.let { (it.first + it.last) / 2 } ?: return null }
+                val at = centers.indices.minByOrNull { kotlin.math.abs(centers[it] - col) } ?: return null
+                return want.compareTo(at)
+            }
+            return null
+        }
+
+        /**
+         * The /model picker: numbered rows, the ❯ one the cursor. 0 when the cursor is on
+         * [target] (an alias such as "opus"; the "Default" row never counts), +1/-1 to step
+         * down/up, null when the target isn't in the plain list or the cursor can't be found.
+         */
+        internal fun modelMove(screen: List<String>, target: String): Int? {
+            val rowRe = Regex("^\\s*(❯)?\\s*\\d+\\.\\s+(.*)$")
+            val rows = screen.mapNotNull { rowRe.find(it) }
+            val cursor = rows.indexOfFirst { it.groupValues[1].isNotEmpty() }.takeIf { it >= 0 } ?: return null
+            val want = rows.indexOfFirst { val n = it.groupValues[2].trim(); !n.startsWith("Default") && n.lowercase().startsWith(target.lowercase()) }
+                .takeIf { it >= 0 } ?: return null
+            return want.compareTo(cursor)
+        }
+
         /**
          * Whether Claude Code's input box (the last "❯" line right under a ─ rule) holds typed
          * text. The start-up placeholder ('Try "…"') isn't a draft.

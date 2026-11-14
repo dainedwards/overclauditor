@@ -26,6 +26,8 @@ class ClaudeTerminalService(private val project: Project) {
     fun createResumeWidget(
         sessionId: String,
         parent: Disposable,
+        /** The session's own --model / --effort (SessionSettings), so it resumes as it was. */
+        extraArgs: List<String> = emptyList(),
         workingDir: String? = null,
         statusFile: Path? = null,
         notifyFile: Path? = null,
@@ -34,7 +36,7 @@ class ClaudeTerminalService(private val project: Project) {
         onUnresponsive: ((Boolean) -> Unit)? = null
     ): TerminalSession {
         return createWidget(
-            arrayOf("claude", "--resume", sessionId),
+            arrayOf("claude", "--resume", sessionId) + extraArgs,
             parent, workingDir = workingDir, statusFile = statusFile, notifyFile = notifyFile,
             onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive        )
     }
@@ -42,6 +44,7 @@ class ClaudeTerminalService(private val project: Project) {
     fun createForkWidget(
         forkFromSessionId: String,
         parent: Disposable,
+        extraArgs: List<String> = emptyList(),
         workingDir: String? = null,
         statusFile: Path? = null,
         notifyFile: Path? = null,
@@ -50,7 +53,7 @@ class ClaudeTerminalService(private val project: Project) {
         onUnresponsive: ((Boolean) -> Unit)? = null
     ): TerminalSession {
         return createWidget(
-            arrayOf("claude", "--resume", forkFromSessionId, "--fork-session"),
+            arrayOf("claude", "--resume", forkFromSessionId, "--fork-session") + extraArgs,
             parent, workingDir = workingDir, statusFile = statusFile, notifyFile = notifyFile,
             onActiveChanged = onActiveChanged, onUserInput = onUserInput, onUnresponsive = onUnresponsive        )
     }

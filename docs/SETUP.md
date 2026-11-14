@@ -66,9 +66,10 @@ within seconds (summary).
     (`~/.claude/commands/`), ask whether the buttons should send theirs or the bundled
     `/overclauditor:*` ones.
 - **`defaultModel`** / **`defaultEffort`** (e.g. `"opus"`, `"medium"`) — what every NEW session
-  starts with (`claude --model --effort`, session-only). The toolbar's dropdowns send `/model` and
-  `/effort`, which Claude Code also saves as the default for new sessions; set these so one tab's
-  choice doesn't decide the next session's. Resumed sessions and forks keep their own.
+  starts with (`claude --model --effort`, session-only). The toolbar's dropdowns change only the
+  session they're in (the `/model` and `/effort` pickers' session-only key), never the saved
+  default. Resumed sessions and forks come back on the model and effort they last ran on (read
+  from the transcript, passed as `--model --effort`).
   **Agent: ask the user** which model and effort they want new sessions to start on.
 - **`bundledCommands`** (default `true`) — load the bundled `/overclauditor:merge`, `:push`,
   `:pull` into plugin sessions (`claude --plugin-dir <IDE system folder>/overclauditor/claude-plugin`).

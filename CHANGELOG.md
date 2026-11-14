@@ -39,6 +39,11 @@ Clauditor 0.7.30 (https://github.com/bdkent/clauditor).
 - The Commit button is gone; caches moved to the IDE system folder and are removed on uninstall.
 
 ### Fixed
+- The model and effort dropdowns saved the pick as Claude Code's default for every new session
+  (and said so), so one tab's "low" became every resumed session's effort. They now drive the
+  `/model` and `/effort` pickers' session-only key, reading the screen at each step; settings.json
+  is never touched. Resumed sessions and forks start on the model and effort their transcript
+  last records (`--model --effort`); new sessions on `defaultModel` / `defaultEffort`.
 - A summary that came back as a sentence ("Cannot build the status line: the images did not
   come through...") could become the tab title. Titles must now be title-shaped (48 characters,
   8 words, no colon, code, path or closing full stop); a bad pinned title is repaired on load, and

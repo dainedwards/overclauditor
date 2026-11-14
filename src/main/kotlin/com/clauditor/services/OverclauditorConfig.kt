@@ -34,9 +34,9 @@ object OverclauditorConfig {
         val bundledCommands: Boolean,
         /**
          * Model and effort every NEW session starts with (claude --model / --effort, session-only).
-         * Picking in the dropdowns sends /model and /effort, which Claude Code also saves as the
-         * default for new sessions, so without these one tab's choice leaks into the next session.
-         * Null: leave it to Claude Code's own default. Resumes and forks keep their own.
+         * The dropdowns change only their own session; these decide where new ones start.
+         * Null: leave it to Claude Code's own default. Resumes and forks get the model and effort
+         * they last ran on (SessionSettings).
          */
         val defaultModel: String? = null,
         val defaultEffort: String? = null
