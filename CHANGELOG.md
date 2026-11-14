@@ -6,6 +6,8 @@ Clauditor 0.7.30 (https://github.com/bdkent/clauditor).
 ## 0.7.30-oc
 
 ### Added
+- Clicking a usage bar (5h, 7d, per-model) opens a menu with "Open Claude Usage Page"
+  (https://claude.ai/settings/usage).
 - Model and effort dropdowns on the toolbar, colour-coded, sized to their options; models show
   their version (learned live from the status line). Effort: low, medium, high, xhigh, max.
 - Branch, change count (`✎4 (2)`: changed files, how many by this session) and the session

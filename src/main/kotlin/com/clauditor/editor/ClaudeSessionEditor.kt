@@ -1622,10 +1622,28 @@ class ClaudeSessionEditor(
                 alignmentY = 0.5f
                 toolTipText = l.resetsAt?.let { "${l.label}: resets in ${formatSpan(java.time.Duration.between(java.time.Instant.now(), it))}" }
                     ?: "${l.label}: no active window"
+                cursor = java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)
+                addMouseListener(object : java.awt.event.MouseAdapter() {
+                    override fun mouseClicked(e: java.awt.event.MouseEvent) = showUsageMenu(e)
+                })
             })
         }
         usagePanel.revalidate()
         usagePanel.repaint()
+    }
+
+    /** Click on a usage bar: a one-item menu to open the plan's usage page on claude.ai. */
+    private fun showUsageMenu(e: java.awt.event.MouseEvent) {
+        val group = com.intellij.openapi.actionSystem.DefaultActionGroup(
+            object : com.intellij.openapi.project.DumbAwareAction("Open Claude Usage Page", null, AllIcons.General.Web) {
+                override fun actionPerformed(ev: com.intellij.openapi.actionSystem.AnActionEvent) =
+                    com.intellij.ide.BrowserUtil.browse(USAGE_URL)
+            }
+        )
+        com.intellij.openapi.ui.popup.JBPopupFactory.getInstance()
+            .createActionGroupPopup(null, group, com.intellij.openapi.actionSystem.DataContext.EMPTY_CONTEXT,
+                com.intellij.openapi.ui.popup.JBPopupFactory.ActionSelectionAid.SPEEDSEARCH, false)
+            .show(com.intellij.ui.awt.RelativePoint(e))
     }
 
     private fun formatSpan(d: java.time.Duration): String {
@@ -2015,6 +2033,7 @@ class ClaudeSessionEditor(
     override fun dispose() { Disposer.dispose(rootDisposable) }
 
     companion object {
+        private const val USAGE_URL = "https://claude.ai/settings/usage"
         /** Both pickers' footers name the session-only key with this phrase. */
         private const val SESSION_ONLY_HINT = "this session only"
         private val EFFORT_LEVELS = listOf("low", "medium", "high", "xhigh", "max")
